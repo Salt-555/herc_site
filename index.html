@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gaylord's Shop</title>
+    <link rel="stylesheet" href="styles.css?v=6">
+</head>
+<body>
+    <div class="shop-container">
+        <header class="shop-header">
+            <h1>Welcome to Gaylord's Shop</h1>
+        </header>
+        
+        <main class="character-stage">
+            <div id="character-display" class="character-wrapper">
+                <video id="tv-player" class="scene-media tv-video" muted playsinline loop preload="auto"></video>
+                <img id="idle-image" src="Media/Videos_Gaylords_Shop/Idle_photo.jpg" alt="Gaylord" class="scene-media character-img">
+                <video id="idle-base-player" class="scene-media base-video" muted playsinline loop preload="auto" poster="Media/Videos_Gaylords_Shop/Idle_photo.jpg"></video>
+                <video id="animation-player" class="scene-media character-video" muted playsinline preload="auto"></video>
+                <div id="tv-hotspot" class="hotspot"></div>
+                <div id="game-hotspot" class="hotspot"></div>
+                <button id="back-button" class="back-button" type="button" hidden>Go Back</button>
+            </div>
+        </main>
+        
+        <footer class="shop-footer">
+            <p>Made it yourself</p>
+        </footer>
+        
+        <canvas id="smoke-canvas" class="smoke-overlay"></canvas>
+        <div id="eye-overlay" class="eye-overlay">
+            <div class="eyelid eyelid-top"></div>
+            <div class="eyelid eyelid-bottom"></div>
+        </div>
+    </div>
+    
+    <script src="Media/Videos_Gaylords_Shop/BG_TV/manifest.js?v=2"></script>
+    <script src="script.js?v=10"></script>
+    <script src="smoke.js?v=3"></script>
+</body>
+</html>
