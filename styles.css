@@ -103,6 +103,18 @@ body {
     clip-path: polygon(2.24% 0, 98.88% 6.58%, 100% 98.68%, 0 100%);
 }
 
+.game-cabinet-video {
+    width: 0;
+    height: 0;
+    object-fit: fill;
+    transform: none;
+    z-index: 1;
+    opacity: 0;
+    -webkit-clip-path: polygon(0% 0%, 93.85% 0.85%, 100% 93.22%, 3.85% 100%);
+    clip-path: polygon(0% 0%, 93.85% 0.85%, 100% 93.22%, 3.85% 100%);
+
+}
+
 .character-img {
     z-index: 2;
 }

@@ -1,5 +1,6 @@
-const MEDIA_PATH = 'Media/Videos_Gaylords_Shop/';
+const MEDIA_PATH = 'Media/Processed_Gaylords_Shop/';
 const TV_CHANNELS = Array.isArray(window.BG_TV_CHANNELS) ? window.BG_TV_CHANNELS : [];
+const GAME_CABINET_CHANNELS = Array.isArray(window.GAME_CABINET_CHANNELS) ? window.GAME_CABINET_CHANNELS : [];
 
 const TV_SCREEN = {
     baseWidth: 1440,
@@ -12,6 +13,17 @@ const TV_SCREEN = {
     }
 };
 
+const GAME_CABINET_SCREEN = {
+    baseWidth: 1024,
+    baseHeight: 1024,
+    corners: {
+        topLeft: { x: 759, y: 490 },
+        topRight: { x: 881, y: 491 },
+        bottomLeft: { x: 764, y: 608 },
+        bottomRight: { x: 889, y: 600 }
+    }
+};
+
 const CONFIG = {
     debugAlphaBackground: false,
     idleDelay: {
@@ -20,11 +32,14 @@ const CONFIG = {
     },
     baseClip: `${MEDIA_PATH}Idle_photo.webm`,
     tvChannels: TV_CHANNELS,
+    gameCabinetChannels: GAME_CABINET_CHANNELS,
     idleClips: [
         { id: 'blink', src: `${MEDIA_PATH}idle_blink.webm` },
         { id: 'speech-1', src: `${MEDIA_PATH}idle_speech1.webm` },
-        { id: 'speech-3', src: `${MEDIA_PATH}Idle_speech3.webm` },
-        { id: 'gun-threat', src: `${MEDIA_PATH}idle_gun_threat.webm` }
+        { id: 'speech-2', src: `${MEDIA_PATH}idle_speech2.webm` },
+        { id: 'speech-3', src: `${MEDIA_PATH}idle_speech3.webm` },
+        { id: 'gun-threat', src: `${MEDIA_PATH}idle_gun_threat.webm` },
+        { id: 'butt-itch', src: `${MEDIA_PATH}butt_itch.webm` }
     ],
     pathways: {
         sleep: `${MEDIA_PATH}falls_asleep.webm`,
@@ -32,7 +47,7 @@ const CONFIG = {
             `${MEDIA_PATH}TV_zoom2.webm`
         ],
         gameZooms: [
-            `${MEDIA_PATH}Game_Zoom1.mp4`
+            `${MEDIA_PATH}Game_Zoom1.webm`
         ]
     }
 };
@@ -49,6 +64,7 @@ const idleImage = document.getElementById('idle-image');
 const idleBasePlayer = document.getElementById('idle-base-player');
 const animationPlayer = document.getElementById('animation-player');
 const tvPlayer = document.getElementById('tv-player');
+const gameCabinetPlayer = document.getElementById('game-cabinet-player');
 const tvHotspot = document.getElementById('tv-hotspot');
 const gameHotspot = document.getElementById('game-hotspot');
 const backButton = document.getElementById('back-button');
@@ -57,6 +73,7 @@ const eyeOverlay = document.getElementById('eye-overlay');
 let currentState = State.IDLE;
 let lastIdleClipIndex = -1;
 let lastTvChannelIndex = -1;
+let lastGameCabinetChannelIndex = -1;
 let scheduledIdleTimeout = null;
 let activeIdleClip = null;
 let isReturningToIdle = false;
@@ -189,6 +206,30 @@ function playRandomTvChannel() {
         });
 }
 
+function startGameCabinetLoop() {
+    if (!CONFIG.gameCabinetChannels.length) {
+        gameCabinetPlayer.style.opacity = '0';
+        return;
+    }
+
+    playRandomGameCabinetChannel();
+}
+
+function playRandomGameCabinetChannel() {
+    const index = getRandomIndex(CONFIG.gameCabinetChannels, lastGameCabinetChannelIndex);
+    if (index === -1) return;
+
+    lastGameCabinetChannelIndex = index;
+    gameCabinetPlayer.style.opacity = '1';
+    log(`Playing Game Cabinet channel: ${CONFIG.gameCabinetChannels[index]}`);
+
+    playVideo(gameCabinetPlayer, CONFIG.gameCabinetChannels[index], { loop: CONFIG.gameCabinetChannels.length === 1 })
+        .catch((error) => {
+            gameCabinetPlayer.style.opacity = '0';
+            log(`Game Cabinet loop unavailable: ${error.message}`);
+        });
+}
+
 function hideHotspots() {
     tvHotspot.hidden = true;
     gameHotspot.hidden = true;
@@ -213,6 +254,7 @@ function setSceneUnderlayVisible(isVisible) {
     idleImage.style.opacity = isVisible ? '0' : '0';
     idleBasePlayer.style.opacity = isVisible ? '1' : '0';
     tvPlayer.style.opacity = isVisible && CONFIG.tvChannels.length ? '1' : '0';
+    gameCabinetPlayer.style.opacity = isVisible && CONFIG.gameCabinetChannels.length ? '1' : '0';
 }
 
 function playPathwayClip(videoSrc) {
@@ -252,6 +294,7 @@ function updateHotspotPositions() {
     });
 
     updateTvScreenPosition(sceneRect);
+    updateGameCabinetScreenPosition(sceneRect);
 }
 
 function updateTvScreenPosition(sceneRect) {
@@ -270,8 +313,28 @@ function updateTvScreenPosition(sceneRect) {
     tvPlayer.style.height = `${(maxY - minY) * scaleY}px`;
 }
 
+function updateGameCabinetScreenPosition(sceneRect) {
+    const wrapperRect = characterDisplay.getBoundingClientRect();
+    const points = Object.values(GAME_CABINET_SCREEN.corners);
+    const minX = Math.min(...points.map((point) => point.x));
+    const maxX = Math.max(...points.map((point) => point.x));
+    const minY = Math.min(...points.map((point) => point.y));
+    const maxY = Math.max(...points.map((point) => point.y));
+    const scaleX = sceneRect.width / GAME_CABINET_SCREEN.baseWidth;
+    const scaleY = sceneRect.height / GAME_CABINET_SCREEN.baseHeight;
+
+    gameCabinetPlayer.style.left = `${sceneRect.left - wrapperRect.left + minX * scaleX}px`;
+    gameCabinetPlayer.style.top = `${sceneRect.top - wrapperRect.top + minY * scaleY}px`;
+    gameCabinetPlayer.style.width = `${(maxX - minX) * scaleX}px`;
+    gameCabinetPlayer.style.height = `${(maxY - minY) * scaleY}px`;
+}
+
 tvPlayer.addEventListener('ended', () => {
     if (CONFIG.tvChannels.length > 1) playRandomTvChannel();
+});
+
+gameCabinetPlayer.addEventListener('ended', () => {
+    if (CONFIG.gameCabinetChannels.length > 1) playRandomGameCabinetChannel();
 });
 
 eyeOverlay.addEventListener('animationend', (event) => {
@@ -346,6 +409,7 @@ window.addEventListener('load', () => {
     hideBackButton();
     updateHotspotPositions();
     startTvLoop();
+    startGameCabinetLoop();
     startBaseIdleLoop();
     scheduleNextIdleClip();
 });
