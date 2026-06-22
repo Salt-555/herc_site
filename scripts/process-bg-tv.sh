@@ -11,6 +11,7 @@ OUTPUT=$2
 DURATION=${3:-30}
 START=${4:-0}
 
+# Canonical geometry: screens.json -> "tv"
 # TV screen bounding box from the 1440x1440 WebM/base-video scene:
 # top-left 221,508 | top-right 394,518 | bottom-left 217,660 | bottom-right 396,658
 # Bounding rectangle: left=217 top=508 width=179 height=152

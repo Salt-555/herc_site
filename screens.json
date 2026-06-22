@@ -1,0 +1,22 @@
+{
+    "tv": {
+        "baseSize": 1440,
+        "corners": {
+            "topLeft":     [221, 508],
+            "topRight":    [394, 518],
+            "bottomLeft":  [217, 660],
+            "bottomRight": [396, 658]
+        },
+        "clipPath": "polygon(2.24% 0%, 98.88% 6.58%, 100% 98.68%, 0% 100%)"
+    },
+    "game-cabinet": {
+        "baseSize": 1024,
+        "corners": {
+            "topLeft":     [759, 490],
+            "topRight":    [881, 491],
+            "bottomLeft":  [764, 608],
+            "bottomRight": [889, 600]
+        },
+        "clipPath": "polygon(0% 0%, 93.85% 0.85%, 100% 93.22%, 3.85% 100%)"
+    }
+}

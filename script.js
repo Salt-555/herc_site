@@ -1,56 +1,95 @@
 const MEDIA_PATH = 'Media/Processed_Gaylords_Shop/';
-const TV_CHANNELS = Array.isArray(window.BG_TV_CHANNELS) ? window.BG_TV_CHANNELS : [];
-const GAME_CABINET_CHANNELS = Array.isArray(window.GAME_CABINET_CHANNELS) ? window.GAME_CABINET_CHANNELS : [];
 
-const TV_SCREEN = {
-    baseWidth: 1440,
-    baseHeight: 1440,
-    corners: {
-        topLeft: { x: 221, y: 508 },
-        topRight: { x: 394, y: 518 },
-        bottomLeft: { x: 217, y: 660 },
-        bottomRight: { x: 396, y: 658 }
-    }
-};
+/* =========================================================================
+ *  Coordinate helper — converts from any source coordinate space to
+ *  rendered pixel position relative to the scene container.
+ *  All coordinate definitions carry their own baseWidth/baseHeight so
+ *  callers never need to remember which space they're in.
+ * ======================================================================= */
 
-const GAME_CABINET_SCREEN = {
-    baseWidth: 1024,
-    baseHeight: 1024,
-    corners: {
-        topLeft: { x: 759, y: 490 },
-        topRight: { x: 881, y: 491 },
-        bottomLeft: { x: 764, y: 608 },
-        bottomRight: { x: 889, y: 600 }
+function sceneToPixel(coord, sourceBase, sceneRect) {
+    const scaleX = sceneRect.width / sourceBase;
+    const scaleY = sceneRect.height / sourceBase;
+    return {
+        x: sceneRect.left + coord.x * scaleX,
+        y: sceneRect.top + coord.y * scaleY
+    };
+}
+
+/* =========================================================================
+ *  Background Screens — data-driven system.
+ *  Each entry defines a video layer positioned behind the alpha-masked
+ *  character. To add a new screen: add an entry here, add a <video> in
+ *  index.html, add a manifest.js with window.YOUR_CHANNELS, and add a
+ *  CSS class with the clip-path.
+ * ======================================================================= */
+
+const SCREENS = [
+    {
+        id: 'tv',
+        elementId: 'tv-player',
+        channels: Array.isArray(window.BG_TV_CHANNELS) ? window.BG_TV_CHANNELS : [],
+        baseSize: 1440,
+        corners: {
+            topLeft:     { x: 221, y: 508 },
+            topRight:    { x: 394, y: 518 },
+            bottomLeft:  { x: 217, y: 660 },
+            bottomRight: { x: 396, y: 658 }
+        }
+    },
+    {
+        id: 'game-cabinet',
+        elementId: 'game-cabinet-player',
+        channels: Array.isArray(window.GAME_CABINET_CHANNELS) ? window.GAME_CABINET_CHANNELS : [],
+        baseSize: 1024,
+        corners: {
+            topLeft:     { x: 759, y: 490 },
+            topRight:    { x: 881, y: 491 },
+            bottomLeft:  { x: 764, y: 608 },
+            bottomRight: { x: 889, y: 600 }
+        }
     }
-};
+];
+
+/* =========================================================================
+ *  Hotspots — single source of truth.
+ *  Coordinates are in 1024x1024 JPG space. Elements are looked up by ID.
+ *  'pathway' names a key in CONFIG.pathways whose value is an array of
+ *  clip paths; a random one is chosen on click.
+ * ======================================================================= */
+
+const HOTSPOTS = [
+    { elementId: 'tv-hotspot',   left: 142, top: 352, width: 173, height: 128, pathway: 'tvZooms' },
+    { elementId: 'game-hotspot', left: 726, top: 410, width: 203, height: 290, pathway: 'gameZooms' }
+];
+
+const HOTSPOT_BASE = 1024;
+
+/* =========================================================================
+ *  Config
+ * ======================================================================= */
 
 const CONFIG = {
-    debugAlphaBackground: false,
-    idleDelay: {
-        min: 5000,
-        max: 15000
-    },
+    idleDelay: { min: 5000, max: 15000 },
     baseClip: `${MEDIA_PATH}Idle_photo.webm`,
-    tvChannels: TV_CHANNELS,
-    gameCabinetChannels: GAME_CABINET_CHANNELS,
     idleClips: [
-        { id: 'blink', src: `${MEDIA_PATH}idle_blink.webm` },
-        { id: 'speech-1', src: `${MEDIA_PATH}idle_speech1.webm` },
-        { id: 'speech-2', src: `${MEDIA_PATH}idle_speech2.webm` },
-        { id: 'speech-3', src: `${MEDIA_PATH}idle_speech3.webm` },
+        { id: 'blink',      src: `${MEDIA_PATH}idle_blink.webm` },
+        { id: 'speech-1',   src: `${MEDIA_PATH}idle_speech1.webm` },
+        { id: 'speech-2',   src: `${MEDIA_PATH}idle_speech2.webm` },
+        { id: 'speech-3',   src: `${MEDIA_PATH}idle_speech3.webm` },
         { id: 'gun-threat', src: `${MEDIA_PATH}idle_gun_threat.webm` },
-        { id: 'butt-itch', src: `${MEDIA_PATH}butt_itch.webm` }
+        { id: 'butt-itch',  src: `${MEDIA_PATH}butt_itch.webm` }
     ],
     pathways: {
-        sleep: `${MEDIA_PATH}falls_asleep.webm`,
-        tvZooms: [
-            `${MEDIA_PATH}TV_zoom2.webm`
-        ],
-        gameZooms: [
-            `${MEDIA_PATH}Game_Zoom1.webm`
-        ]
+        sleep: [`${MEDIA_PATH}falls_asleep.webm`],
+        tvZooms: [`${MEDIA_PATH}TV_zoom2.webm`],
+        gameZooms: [`${MEDIA_PATH}Game_Zoom1.webm`]
     }
 };
+
+/* =========================================================================
+ *  State
+ * ======================================================================= */
 
 const State = {
     IDLE: 'idle',
@@ -59,24 +98,104 @@ const State = {
     PATHWAY: 'pathway'
 };
 
+/* =========================================================================
+ *  DOM refs
+ * ======================================================================= */
+
 const characterDisplay = document.getElementById('character-display');
 const idleImage = document.getElementById('idle-image');
 const idleBasePlayer = document.getElementById('idle-base-player');
 const animationPlayer = document.getElementById('animation-player');
-const tvPlayer = document.getElementById('tv-player');
-const gameCabinetPlayer = document.getElementById('game-cabinet-player');
-const tvHotspot = document.getElementById('tv-hotspot');
-const gameHotspot = document.getElementById('game-hotspot');
 const backButton = document.getElementById('back-button');
 const eyeOverlay = document.getElementById('eye-overlay');
 
+/* =========================================================================
+ *  Runtime state
+ * ======================================================================= */
+
 let currentState = State.IDLE;
 let lastIdleClipIndex = -1;
-let lastTvChannelIndex = -1;
-let lastGameCabinetChannelIndex = -1;
 let scheduledIdleTimeout = null;
 let activeIdleClip = null;
+let preloadedIdleClip = null;
 let isReturningToIdle = false;
+
+/* =========================================================================
+ *  Initialize background screens
+ *  Each screen gets its own element ref, last-index tracker, and
+ *  ended-event listener. No per-screen functions needed.
+ * ======================================================================= */
+
+SCREENS.forEach((screen) => {
+    screen.element = document.getElementById(screen.elementId);
+    screen.lastIndex = -1;
+});
+
+function playRandomChannel(screen) {
+    if (!screen.channels.length) {
+        screen.element.style.opacity = '0';
+        return;
+    }
+
+    const index = getRandomIndex(screen.channels, screen.lastIndex);
+    if (index === -1) return;
+
+    screen.lastIndex = index;
+    screen.element.style.opacity = '1';
+    log(`Playing ${screen.id} channel: ${screen.channels[index]}`);
+
+    playVideo(screen.element, screen.channels[index], {
+        loop: screen.channels.length === 1
+    }).catch((error) => {
+        screen.element.style.opacity = '0';
+        log(`${screen.id} playback error: ${error.message}`);
+    });
+}
+
+function updateScreenPosition(screen, sceneRect) {
+    const wrapperRect = characterDisplay.getBoundingClientRect();
+    const points = Object.values(screen.corners);
+    const minX = Math.min(...points.map((p) => p.x));
+    const maxX = Math.max(...points.map((p) => p.x));
+    const minY = Math.min(...points.map((p) => p.y));
+    const maxY = Math.max(...points.map((p) => p.y));
+    const scaleX = sceneRect.width / screen.baseSize;
+    const scaleY = sceneRect.height / screen.baseSize;
+
+    screen.element.style.left = `${sceneRect.left - wrapperRect.left + minX * scaleX}px`;
+    screen.element.style.top = `${sceneRect.top - wrapperRect.top + minY * scaleY}px`;
+    screen.element.style.width = `${(maxX - minX) * scaleX}px`;
+    screen.element.style.height = `${(maxY - minY) * scaleY}px`;
+}
+
+SCREENS.forEach((screen) => {
+    screen.element.addEventListener('ended', () => {
+        if (screen.channels.length > 1) playRandomChannel(screen);
+    });
+});
+
+/* =========================================================================
+ *  Initialize hotspots
+ *  Elements are looked up once; click handlers wired from config.
+ * ======================================================================= */
+
+const hotspotElements = HOTSPOTS.map((hs) => {
+    const el = document.getElementById(hs.elementId);
+    hs.element = el;
+
+    el.addEventListener('click', () => {
+        const clips = CONFIG.pathways[hs.pathway];
+        if (!clips || !clips.length) return;
+        const clip = clips[getRandomIndex(clips)];
+        playPathwayClip(clip);
+    });
+
+    return el;
+});
+
+/* =========================================================================
+ *  Utilities
+ * ======================================================================= */
 
 function log(message) {
     console.log(`[${currentState}] ${message}`);
@@ -84,38 +203,57 @@ function log(message) {
 
 function getRandomIndex(items, lastIndex = -1) {
     if (!items.length) return -1;
-
     let index;
     do {
         index = Math.floor(Math.random() * items.length);
     } while (index === lastIndex && items.length > 1);
-
     return index;
 }
 
 function playVideo(video, src, { loop = false } = {}) {
     video.loop = loop;
-
     if (video.getAttribute('src') !== src) {
         video.src = src;
         video.load();
     }
-
     return video.play();
 }
 
+/* =========================================================================
+ *  Idle clip preloading
+ *  During idle state, we preload the next random clip into a detached
+ *  <video> element so it's ready instantly when the timer fires.
+ * ======================================================================= */
+
+const preloadVideo = document.createElement('video');
+preloadVideo.muted = true;
+preloadVideo.preload = 'auto';
+
+function preloadNextIdleClip() {
+    const index = getRandomIndex(CONFIG.idleClips, lastIdleClipIndex);
+    if (index === -1) return;
+
+    preloadedIdleClip = { index, clip: CONFIG.idleClips[index] };
+    preloadVideo.src = CONFIG.idleClips[index].src;
+    preloadVideo.load();
+    log(`Preloading next idle clip: ${CONFIG.idleClips[index].id}`);
+}
+
+/* =========================================================================
+ *  Idle scheduling
+ * ======================================================================= */
+
 function scheduleNextIdleClip() {
     clearScheduledIdleClip();
-
     const delay = Math.random() * (CONFIG.idleDelay.max - CONFIG.idleDelay.min) + CONFIG.idleDelay.min;
     log(`Scheduling next idle clip in ${Math.round(delay)}ms`);
-
     scheduledIdleTimeout = setTimeout(loadNextIdleClip, delay);
+
+    preloadNextIdleClip();
 }
 
 function clearScheduledIdleClip() {
     if (!scheduledIdleTimeout) return;
-
     clearTimeout(scheduledIdleTimeout);
     scheduledIdleTimeout = null;
 }
@@ -123,10 +261,18 @@ function clearScheduledIdleClip() {
 function loadNextIdleClip() {
     if (currentState !== State.IDLE) return;
 
-    const index = getRandomIndex(CONFIG.idleClips, lastIdleClipIndex);
-    if (index === -1) return;
+    let index, clip;
+    if (preloadedIdleClip) {
+        index = preloadedIdleClip.index;
+        clip = preloadedIdleClip.clip;
+        preloadedIdleClip = null;
+    } else {
+        index = getRandomIndex(CONFIG.idleClips, lastIdleClipIndex);
+        if (index === -1) return;
+        clip = CONFIG.idleClips[index];
+    }
 
-    activeIdleClip = CONFIG.idleClips[index];
+    activeIdleClip = clip;
     lastIdleClipIndex = index;
     currentState = State.LOADING_IDLE_CLIP;
 
@@ -150,6 +296,10 @@ function playLoadedIdleClip() {
     });
 }
 
+/* =========================================================================
+ *  State transitions
+ * ======================================================================= */
+
 function returnToIdle() {
     if (currentState === State.IDLE) return;
 
@@ -161,7 +311,11 @@ function returnToIdle() {
     animationPlayer.removeAttribute('src');
     animationPlayer.load();
 
-    setSceneUnderlayVisible(true);
+    idleBasePlayer.style.opacity = '1';
+    SCREENS.forEach((screen) => {
+        if (screen.channels.length) screen.element.style.opacity = '1';
+    });
+
     hideBackButton();
     showHotspots();
     scheduleNextIdleClip();
@@ -182,86 +336,10 @@ function startBaseIdleLoop() {
         });
 }
 
-function startTvLoop() {
-    if (!CONFIG.tvChannels.length) {
-        tvPlayer.style.opacity = '0';
-        return;
-    }
-
-    playRandomTvChannel();
-}
-
-function playRandomTvChannel() {
-    const index = getRandomIndex(CONFIG.tvChannels, lastTvChannelIndex);
-    if (index === -1) return;
-
-    lastTvChannelIndex = index;
-    tvPlayer.style.opacity = '1';
-    log(`Playing TV channel: ${CONFIG.tvChannels[index]}`);
-
-    playVideo(tvPlayer, CONFIG.tvChannels[index], { loop: CONFIG.tvChannels.length === 1 })
-        .catch((error) => {
-            tvPlayer.style.opacity = '0';
-            log(`TV loop unavailable: ${error.message}`);
-        });
-}
-
-function startGameCabinetLoop() {
-    if (!CONFIG.gameCabinetChannels.length) {
-        gameCabinetPlayer.style.opacity = '0';
-        return;
-    }
-
-    playRandomGameCabinetChannel();
-}
-
-function playRandomGameCabinetChannel() {
-    const index = getRandomIndex(CONFIG.gameCabinetChannels, lastGameCabinetChannelIndex);
-    if (index === -1) return;
-
-    lastGameCabinetChannelIndex = index;
-    gameCabinetPlayer.style.opacity = '1';
-    log(`Playing Game Cabinet channel: ${CONFIG.gameCabinetChannels[index]}`);
-
-    playVideo(gameCabinetPlayer, CONFIG.gameCabinetChannels[index], { loop: CONFIG.gameCabinetChannels.length === 1 })
-        .catch((error) => {
-            gameCabinetPlayer.style.opacity = '0';
-            log(`Game Cabinet loop unavailable: ${error.message}`);
-        });
-}
-
-function hideHotspots() {
-    tvHotspot.hidden = true;
-    gameHotspot.hidden = true;
-}
-
-function showHotspots() {
-    tvHotspot.hidden = false;
-    gameHotspot.hidden = false;
-}
-
-function showBackButton() {
-    backButton.hidden = false;
-}
-
-function hideBackButton() {
-    backButton.hidden = true;
-}
-
-function setSceneUnderlayVisible(isVisible) {
-    if (!CONFIG.debugAlphaBackground) return;
-
-    idleImage.style.opacity = isVisible ? '0' : '0';
-    idleBasePlayer.style.opacity = isVisible ? '1' : '0';
-    tvPlayer.style.opacity = isVisible && CONFIG.tvChannels.length ? '1' : '0';
-    gameCabinetPlayer.style.opacity = isVisible && CONFIG.gameCabinetChannels.length ? '1' : '0';
-}
-
 function playPathwayClip(videoSrc) {
     clearScheduledIdleClip();
     hideHotspots();
     showBackButton();
-    setSceneUnderlayVisible(false);
 
     currentState = State.PATHWAY;
     log(`Playing pathway clip: ${videoSrc}`);
@@ -272,76 +350,79 @@ function playPathwayClip(videoSrc) {
     animationPlayer.load();
 }
 
+/* =========================================================================
+ *  Hotspot visibility
+ * ======================================================================= */
+
+function hideHotspots() {
+    hotspotElements.forEach((el) => { el.hidden = true; });
+}
+
+function showHotspots() {
+    hotspotElements.forEach((el) => { el.hidden = false; });
+}
+
+/* =========================================================================
+ *  Back button
+ * ======================================================================= */
+
+function showBackButton() {
+    backButton.hidden = false;
+}
+
+function hideBackButton() {
+    backButton.hidden = true;
+}
+
+/* =========================================================================
+ *  Layout — positions hotspots and background screens
+ * ======================================================================= */
+
 function getSceneRect() {
     return idleImage.getBoundingClientRect();
 }
 
-function updateHotspotPositions() {
+function updateLayout() {
     const sceneRect = getSceneRect();
-    const scaleX = sceneRect.width / 1024;
-    const scaleY = sceneRect.height / 1024;
 
-    const hotspots = [
-        { element: tvHotspot, left: 142, top: 352, width: 173, height: 128 },
-        { element: gameHotspot, left: 726, top: 410, width: 203, height: 290 }
-    ];
+    // Position hotspots (all in 1024x1024 space)
+    const scaleX = sceneRect.width / HOTSPOT_BASE;
+    const scaleY = sceneRect.height / HOTSPOT_BASE;
 
-    hotspots.forEach(({ element, left, top, width, height }) => {
-        element.style.left = `${sceneRect.left + left * scaleX}px`;
-        element.style.top = `${sceneRect.top + top * scaleY}px`;
-        element.style.width = `${width * scaleX}px`;
-        element.style.height = `${height * scaleY}px`;
+    HOTSPOTS.forEach((hs) => {
+        hs.element.style.left = `${sceneRect.left + hs.left * scaleX}px`;
+        hs.element.style.top = `${sceneRect.top + hs.top * scaleY}px`;
+        hs.element.style.width = `${hs.width * scaleX}px`;
+        hs.element.style.height = `${hs.height * scaleY}px`;
     });
 
-    updateTvScreenPosition(sceneRect);
-    updateGameCabinetScreenPosition(sceneRect);
+    // Position background screens (each carries its own base size)
+    SCREENS.forEach((screen) => {
+        updateScreenPosition(screen, sceneRect);
+    });
 }
 
-function updateTvScreenPosition(sceneRect) {
-    const wrapperRect = characterDisplay.getBoundingClientRect();
-    const points = Object.values(TV_SCREEN.corners);
-    const minX = Math.min(...points.map((point) => point.x));
-    const maxX = Math.max(...points.map((point) => point.x));
-    const minY = Math.min(...points.map((point) => point.y));
-    const maxY = Math.max(...points.map((point) => point.y));
-    const scaleX = sceneRect.width / TV_SCREEN.baseWidth;
-    const scaleY = sceneRect.height / TV_SCREEN.baseHeight;
-
-    tvPlayer.style.left = `${sceneRect.left - wrapperRect.left + minX * scaleX}px`;
-    tvPlayer.style.top = `${sceneRect.top - wrapperRect.top + minY * scaleY}px`;
-    tvPlayer.style.width = `${(maxX - minX) * scaleX}px`;
-    tvPlayer.style.height = `${(maxY - minY) * scaleY}px`;
-}
-
-function updateGameCabinetScreenPosition(sceneRect) {
-    const wrapperRect = characterDisplay.getBoundingClientRect();
-    const points = Object.values(GAME_CABINET_SCREEN.corners);
-    const minX = Math.min(...points.map((point) => point.x));
-    const maxX = Math.max(...points.map((point) => point.x));
-    const minY = Math.min(...points.map((point) => point.y));
-    const maxY = Math.max(...points.map((point) => point.y));
-    const scaleX = sceneRect.width / GAME_CABINET_SCREEN.baseWidth;
-    const scaleY = sceneRect.height / GAME_CABINET_SCREEN.baseHeight;
-
-    gameCabinetPlayer.style.left = `${sceneRect.left - wrapperRect.left + minX * scaleX}px`;
-    gameCabinetPlayer.style.top = `${sceneRect.top - wrapperRect.top + minY * scaleY}px`;
-    gameCabinetPlayer.style.width = `${(maxX - minX) * scaleX}px`;
-    gameCabinetPlayer.style.height = `${(maxY - minY) * scaleY}px`;
-}
-
-tvPlayer.addEventListener('ended', () => {
-    if (CONFIG.tvChannels.length > 1) playRandomTvChannel();
-});
-
-gameCabinetPlayer.addEventListener('ended', () => {
-    if (CONFIG.gameCabinetChannels.length > 1) playRandomGameCabinetChannel();
-});
+/* =========================================================================
+ *  Event listeners
+ * ======================================================================= */
 
 eyeOverlay.addEventListener('animationend', (event) => {
     if (!event.target.classList.contains('eyelid-top')) return;
 
     if (eyeOverlay.classList.contains('closing')) {
-        window.location.reload();
+        // Eyelids closed — reset to idle instead of full page reload
+        eyeOverlay.classList.remove('closing');
+        isReturningToIdle = false;
+        returnToIdle();
+
+        // Re-open the eyelids
+        eyeOverlay.classList.remove('done');
+        const eyelids = eyeOverlay.querySelectorAll('.eyelid');
+        eyelids.forEach((lid) => {
+            lid.style.animation = 'none';
+            void lid.offsetHeight;  // force reflow
+            lid.style.animation = '';
+        });
         return;
     }
 
@@ -380,18 +461,6 @@ animationPlayer.addEventListener('error', () => {
     returnToIdle();
 });
 
-tvHotspot.addEventListener('click', () => {
-    const zooms = CONFIG.pathways.tvZooms;
-    const randomTvZoom = zooms[getRandomIndex(zooms)];
-    playPathwayClip(randomTvZoom);
-});
-
-gameHotspot.addEventListener('click', () => {
-    const zooms = CONFIG.pathways.gameZooms;
-    const randomGameZoom = zooms[getRandomIndex(zooms)];
-    playPathwayClip(randomGameZoom);
-});
-
 backButton.addEventListener('click', () => {
     if (isReturningToIdle) return;
 
@@ -404,16 +473,19 @@ backButton.addEventListener('click', () => {
     eyeOverlay.classList.add('closing');
 });
 
-window.addEventListener('resize', updateHotspotPositions);
+/* =========================================================================
+ *  Startup
+ * ======================================================================= */
+
+window.addEventListener('resize', updateLayout);
 window.addEventListener('load', () => {
     hideBackButton();
-    updateHotspotPositions();
-    startTvLoop();
-    startGameCabinetLoop();
+    updateLayout();
+    SCREENS.forEach((screen) => playRandomChannel(screen));
     startBaseIdleLoop();
     scheduleNextIdleClip();
 });
 
-characterDisplay.addEventListener('transitionend', updateHotspotPositions);
+characterDisplay.addEventListener('transitionend', updateLayout);
 
 log('Initializing animation controller');

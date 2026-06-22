@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Game Cabinet screen bounding box from the 1440x1440 scene:
+# Canonical geometry: screens.json -> "game-cabinet"
+# Game Cabinet screen bounding box (1024x1024 coords):
 # top-left 759,490 | top-right 881,491 | bottom-left 764,608 | bottom-right 889,600
 # Bounding rectangle: left=759 top=490 width=130 height=118
 # Destination quad inside that rectangle:
