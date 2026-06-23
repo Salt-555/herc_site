@@ -1,5 +1,4 @@
 window.GAME_CABINET_CHANNELS = [
-    'Media/Game_Cabinet/Bad_Bug.webm',
     'Media/Game_Cabinet/CentAttack.webm',
     'Media/Game_Cabinet/GaylordsGameplay.webm',
     'Media/Game_Cabinet/GaylordsLastStandGameplay2.webm',

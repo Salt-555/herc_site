@@ -31,7 +31,7 @@ for mp4 in "$SRC_DIR"/*.mp4; do
         ffmpeg -y \
             -i "$mp4" \
             -vf "scale=160:-2,crop=130:118,setsar=1,perspective=x0=0:y0=0:x1=122:y1=1:x2=5:y2=118:x3=130:y3=110:sense=destination:interpolation=cubic,fps=12" \
-            -af "volume=0.02" \
+            -af "volume=1.0" \
             -c:v libvpx-vp9 \
             -b:v 0 \
             -crf 36 \

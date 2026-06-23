@@ -28,7 +28,7 @@ const SCREENS = [
     {
         id: 'tv',
         elementId: 'tv-player',
-        keepMuted: true,
+        hotspotId: 'tv-hotspot',
         channels: Array.isArray(window.BG_TV_CHANNELS) ? window.BG_TV_CHANNELS : [],
         baseSize: 1440,
         corners: {
@@ -41,7 +41,7 @@ const SCREENS = [
     {
         id: 'game-cabinet',
         elementId: 'game-cabinet-player',
-        keepMuted: false,
+        hotspotId: 'game-hotspot',
         channels: Array.isArray(window.GAME_CABINET_CHANNELS) ? window.GAME_CABINET_CHANNELS : [],
         baseSize: 1024,
         corners: {
@@ -126,37 +126,153 @@ let masterVolume = 1.0;
 let isMuted = false;
 
 /* =========================================================================
- *  Audio controls
- *  All videos start muted for autoplay compliance. On first user
- *  interaction, unmute eligible elements. Mute button and volume slider
- *  control master volume across all audio-enabled video elements.
+ *  Sound Engine
+ *  Manages three audio layers with smooth cross-fading:
+ *    1. BG Music   — always playing, ducks when hovering a screen
+ *    2. TV audio   — silent by default, fades up on hover
+ *    3. Game Cabinet audio — silent by default, fades up on hover
+ *
+ *  Volume model (all multiplied by masterVolume):
+ *    - Default:   bgMusic = AUDIO_MIX.bgDefault,  screens = 0
+ *    - Hovering:  bgMusic = AUDIO_MIX.bgDucked,   hovered screen = AUDIO_MIX.screenFocused
+ *
+ *  Transitions use requestAnimationFrame for smooth ramping.
  * ======================================================================= */
+
+const AUDIO_MIX = {
+    bgDefault:     0.1,     // BG music volume when nothing is hovered
+    bgDucked:      0.05,    // BG music volume when hovering a screen
+    charDefault:   0.7,     // Character clip volume when nothing is hovered
+    charDucked:    0.3,     // Character clip volume when hovering a screen
+    screenFocused: 0.4,     // Screen volume when hovered (full)
+    fadeSpeed:     4.0      // Units per second (0→1 in 250ms)
+};
 
 const muteButton = document.getElementById('mute-button');
 const volumeSlider = document.getElementById('volume-slider');
 
-function getAudioElements() {
-    const elements = [animationPlayer];
-    SCREENS.forEach((screen) => {
-        if (!screen.keepMuted) elements.push(screen.element);
+/* --- BG Music player --- */
+const bgMusicPlayer = document.getElementById('bg-music-player');
+let bgMusicLastIndex = -1;
+const bgMusicTracks = Array.isArray(window.BG_MUSIC_TRACKS) ? window.BG_MUSIC_TRACKS : [];
+
+function playRandomBgTrack() {
+    if (!bgMusicTracks.length) return;
+    const index = getRandomIndex(bgMusicTracks, bgMusicLastIndex);
+    if (index === -1) return;
+    bgMusicLastIndex = index;
+    bgMusicPlayer.src = bgMusicTracks[index];
+    bgMusicPlayer.load();
+    bgMusicPlayer.play().catch(() => {});
+    log(`BG Music: playing ${bgMusicTracks[index]}`);
+}
+
+bgMusicPlayer.addEventListener('ended', () => {
+    if (bgMusicTracks.length > 1) {
+        playRandomBgTrack();
+    } else if (bgMusicTracks.length === 1) {
+        bgMusicPlayer.currentTime = 0;
+        bgMusicPlayer.play().catch(() => {});
+    }
+});
+
+/* --- Volume targets & current levels (pre-masterVolume, 0-1) --- */
+const volumeTargets = { bgMusic: AUDIO_MIX.bgDefault, character: AUDIO_MIX.charDefault };
+const volumeCurrent = { bgMusic: 0, character: 0 };
+
+/* Per-screen volume tracking is stored on the screen objects after init.
+   screen.volTarget = 0;  screen.volCurrent = 0;                         */
+
+let hoveredScreen = null;
+let volumeRafId = null;
+
+function setHoverTarget(screen) {
+    hoveredScreen = screen;
+    if (screen) {
+        volumeTargets.bgMusic = AUDIO_MIX.bgDucked;
+        volumeTargets.character = AUDIO_MIX.charDucked;
+        SCREENS.forEach((s) => { s.volTarget = (s === screen) ? AUDIO_MIX.screenFocused : 0; });
+    } else {
+        volumeTargets.bgMusic = AUDIO_MIX.bgDefault;
+        volumeTargets.character = AUDIO_MIX.charDefault;
+        SCREENS.forEach((s) => { s.volTarget = 0; });
+    }
+    startVolumeFade();
+}
+
+function startVolumeFade() {
+    if (volumeRafId) return;
+    let lastTime = performance.now();
+    function tick(now) {
+        const dt = (now - lastTime) / 1000;
+        lastTime = now;
+        let done = true;
+
+        // Ramp BG music
+        volumeCurrent.bgMusic = ramp(volumeCurrent.bgMusic, volumeTargets.bgMusic, dt);
+        if (Math.abs(volumeCurrent.bgMusic - volumeTargets.bgMusic) > 0.001) done = false;
+
+        // Ramp character (idle clips, pathway clips)
+        volumeCurrent.character = ramp(volumeCurrent.character, volumeTargets.character, dt);
+        if (Math.abs(volumeCurrent.character - volumeTargets.character) > 0.001) done = false;
+
+        // Ramp each screen
+        SCREENS.forEach((s) => {
+            s.volCurrent = ramp(s.volCurrent, s.volTarget, dt);
+            if (Math.abs(s.volCurrent - s.volTarget) > 0.001) done = false;
+        });
+
+        commitVolumes();
+
+        if (done) {
+            volumeRafId = null;
+        } else {
+            volumeRafId = requestAnimationFrame(tick);
+        }
+    }
+    volumeRafId = requestAnimationFrame(tick);
+}
+
+function ramp(current, target, dt) {
+    const step = AUDIO_MIX.fadeSpeed * dt;
+    if (current < target) return Math.min(current + step, target);
+    if (current > target) return Math.max(current - step, target);
+    return Math.max(0, Math.min(1, target));
+}
+
+function commitVolumes() {
+    /* Before first user gesture everything stays muted (autoplay policy) */
+    if (!audioUnlocked) return;
+    const m = isMuted ? 0 : masterVolume;
+    bgMusicPlayer.volume = volumeCurrent.bgMusic * m;
+    SCREENS.forEach((s) => {
+        if (s.element) s.element.volume = s.volCurrent * m;
     });
-    return elements;
+    animationPlayer.volume = volumeCurrent.character * m;
 }
 
 function applyVolume() {
-    const vol = isMuted ? 0 : masterVolume;
-    getAudioElements().forEach((el) => { el.volume = vol; });
+    commitVolumes();
 }
 
 function unlockAudio() {
     if (audioUnlocked) return;
     audioUnlocked = true;
 
-    SCREENS.forEach((screen) => {
-        if (!screen.keepMuted) screen.element.muted = false;
-    });
+    /* Unmute elements (browsers block playback of unmuted media without
+       a user gesture, so this must happen inside a click/keydown handler) */
+    SCREENS.forEach((s) => { s.element.muted = false; });
     animationPlayer.muted = false;
-    applyVolume();
+    bgMusicPlayer.muted = false;
+
+    /* Reset ramp state so volumes fade in from zero */
+    volumeCurrent.bgMusic = 0;
+    volumeCurrent.character = 0;
+    SCREENS.forEach((s) => { s.volCurrent = 0; });
+
+    commitVolumes();
+    playRandomBgTrack();
+    startVolumeFade();
 
     log('Audio unlocked');
     document.removeEventListener('click', unlockAudio);
@@ -170,7 +286,7 @@ muteButton.addEventListener('click', (e) => {
     e.stopPropagation();
     isMuted = !isMuted;
     muteButton.classList.toggle('is-muted', isMuted);
-    applyVolume();
+    commitVolumes();
 });
 
 volumeSlider.addEventListener('input', () => {
@@ -179,7 +295,7 @@ volumeSlider.addEventListener('input', () => {
         isMuted = false;
         muteButton.classList.remove('is-muted');
     }
-    applyVolume();
+    commitVolumes();
 });
 
 /* =========================================================================
@@ -191,6 +307,16 @@ volumeSlider.addEventListener('input', () => {
 SCREENS.forEach((screen) => {
     screen.element = document.getElementById(screen.elementId);
     screen.lastIndex = -1;
+    screen.volTarget = 0;
+    screen.volCurrent = 0;
+    screen.element.volume = 0;
+
+    /* Wire hover listeners on the associated hotspot element */
+    const hotspotEl = document.getElementById(screen.hotspotId);
+    if (hotspotEl) {
+        hotspotEl.addEventListener('mouseenter', () => { setHoverTarget(screen); });
+        hotspotEl.addEventListener('mouseleave', () => { setHoverTarget(null); });
+    }
 });
 
 function playRandomChannel(screen) {
