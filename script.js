@@ -28,6 +28,7 @@ const SCREENS = [
     {
         id: 'tv',
         elementId: 'tv-player',
+        keepMuted: true,
         channels: Array.isArray(window.BG_TV_CHANNELS) ? window.BG_TV_CHANNELS : [],
         baseSize: 1440,
         corners: {
@@ -40,12 +41,13 @@ const SCREENS = [
     {
         id: 'game-cabinet',
         elementId: 'game-cabinet-player',
+        keepMuted: false,
         channels: Array.isArray(window.GAME_CABINET_CHANNELS) ? window.GAME_CABINET_CHANNELS : [],
         baseSize: 1024,
         corners: {
-            topLeft:     { x: 759, y: 490 },
-            topRight:    { x: 881, y: 491 },
-            bottomLeft:  { x: 764, y: 608 },
+            topLeft:     { x: 764, y: 495 },
+            topRight:    { x: 881, y: 496 },
+            bottomLeft:  { x: 769, y: 608 },
             bottomRight: { x: 889, y: 600 }
         }
     }
@@ -119,6 +121,31 @@ let scheduledIdleTimeout = null;
 let activeIdleClip = null;
 let preloadedIdleClip = null;
 let isReturningToIdle = false;
+let audioUnlocked = false;
+
+/* =========================================================================
+ *  Audio unlock
+ *  Browsers block unmuted autoplay. All videos start muted in HTML.
+ *  On first user interaction, we unmute the ones that should have audio.
+ * ======================================================================= */
+
+function unlockAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+
+    // Unmute game cabinet and animation player
+    SCREENS.forEach((screen) => {
+        if (!screen.keepMuted) screen.element.muted = false;
+    });
+    animationPlayer.muted = false;
+
+    log('Audio unlocked');
+    document.removeEventListener('click', unlockAudio);
+    document.removeEventListener('keydown', unlockAudio);
+}
+
+document.addEventListener('click', unlockAudio);
+document.addEventListener('keydown', unlockAudio);
 
 /* =========================================================================
  *  Initialize background screens

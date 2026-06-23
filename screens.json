@@ -12,11 +12,11 @@
     "game-cabinet": {
         "baseSize": 1024,
         "corners": {
-            "topLeft":     [759, 490],
-            "topRight":    [881, 491],
-            "bottomLeft":  [764, 608],
+            "topLeft":     [764, 495],
+            "topRight":    [881, 496],
+            "bottomLeft":  [769, 608],
             "bottomRight": [889, 600]
         },
-        "clipPath": "polygon(0% 0%, 93.85% 0.85%, 100% 93.22%, 3.85% 100%)"
+        "clipPath": "polygon(0% 0%, 93.6% 0.88%, 100% 92.92%, 4% 100%)"
     }
 }

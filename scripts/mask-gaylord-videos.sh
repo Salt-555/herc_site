@@ -82,6 +82,9 @@ for input in "${videos[@]}"; do
         continue
     fi
 
+    # Check if source has audio
+    has_audio=$(ffprobe -v error -select_streams a -show_entries stream=codec_name -of csv=p=0 "$input" 2>/dev/null)
+
     # Step 1: Extract RGBA PNG frames with mask alpha applied
     frame_dir="$TEMP_DIR/$base"
     mkdir -p "$frame_dir"
@@ -96,18 +99,35 @@ for input in "${videos[@]}"; do
         -t "$duration" \
         "$frame_dir/frame_%05d.png"
 
-    # Step 2: Encode RGBA PNGs to VP9 alpha WebM
+    # Step 2: Encode RGBA PNGs to VP9 alpha WebM, with audio if available
     printf '  [2/2] Encoding VP9 alpha WebM...\n'
-    ffmpeg -y \
-        -framerate "$framerate" \
-        -i "$frame_dir/frame_%05d.png" \
-        -c:v libvpx-vp9 \
-        -pix_fmt yuva420p \
-        -auto-alt-ref 0 \
-        -crf "$CRF" \
-        -b:v 0 \
-        -an \
-        "$output"
+    if [ -n "$has_audio" ]; then
+        ffmpeg -y \
+            -framerate "$framerate" \
+            -i "$frame_dir/frame_%05d.png" \
+            -i "$input" \
+            -map 0:v -map 1:a \
+            -c:v libvpx-vp9 \
+            -pix_fmt yuva420p \
+            -auto-alt-ref 0 \
+            -crf "$CRF" \
+            -b:v 0 \
+            -af "volume=0.7" \
+            -c:a libopus -b:a 64k \
+            -t "$duration" \
+            "$output"
+    else
+        ffmpeg -y \
+            -framerate "$framerate" \
+            -i "$frame_dir/frame_%05d.png" \
+            -c:v libvpx-vp9 \
+            -pix_fmt yuva420p \
+            -auto-alt-ref 0 \
+            -crf "$CRF" \
+            -b:v 0 \
+            -an \
+            "$output"
+    fi
 
     # Clean up frames for this video
     rm -rf "$frame_dir"
