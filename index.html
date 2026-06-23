@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gaylord's Shop</title>
-    <link rel="stylesheet" href="styles.css?v=10">
+    <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
     <div class="shop-container">
@@ -29,6 +29,16 @@
             <p>Made it yourself</p>
         </footer>
         
+        <div id="audio-controls" class="audio-controls">
+            <button id="mute-button" class="mute-button" type="button" title="Toggle sound">
+                <svg class="speaker-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                    <path class="sound-waves" d="M15.54 8.46a5 5 0 0 1 0 7.07 M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                    <line class="mute-x" x1="2" y1="2" x2="22" y2="22" style="display:none"></line>
+                </svg>
+            </button>
+            <input id="volume-slider" class="volume-slider" type="range" min="0" max="100" value="100" title="Volume">
+        </div>
         <canvas id="smoke-canvas" class="smoke-overlay"></canvas>
         <div id="eye-overlay" class="eye-overlay">
             <div class="eyelid eyelid-top"></div>
@@ -38,7 +48,7 @@
     
     <script src="Media/BG_TV/manifest.js?v=3"></script>
     <script src="Media/Game_Cabinet/manifest.js?v=1"></script>
-    <script src="script.js?v=19"></script>
+    <script src="script.js?v=20"></script>
     <script src="smoke.js?v=3"></script>
 </body>
 </html>

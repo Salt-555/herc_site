@@ -122,22 +122,41 @@ let activeIdleClip = null;
 let preloadedIdleClip = null;
 let isReturningToIdle = false;
 let audioUnlocked = false;
+let masterVolume = 1.0;
+let isMuted = false;
 
 /* =========================================================================
- *  Audio unlock
- *  Browsers block unmuted autoplay. All videos start muted in HTML.
- *  On first user interaction, we unmute the ones that should have audio.
+ *  Audio controls
+ *  All videos start muted for autoplay compliance. On first user
+ *  interaction, unmute eligible elements. Mute button and volume slider
+ *  control master volume across all audio-enabled video elements.
  * ======================================================================= */
+
+const muteButton = document.getElementById('mute-button');
+const volumeSlider = document.getElementById('volume-slider');
+
+function getAudioElements() {
+    const elements = [animationPlayer];
+    SCREENS.forEach((screen) => {
+        if (!screen.keepMuted) elements.push(screen.element);
+    });
+    return elements;
+}
+
+function applyVolume() {
+    const vol = isMuted ? 0 : masterVolume;
+    getAudioElements().forEach((el) => { el.volume = vol; });
+}
 
 function unlockAudio() {
     if (audioUnlocked) return;
     audioUnlocked = true;
 
-    // Unmute game cabinet and animation player
     SCREENS.forEach((screen) => {
         if (!screen.keepMuted) screen.element.muted = false;
     });
     animationPlayer.muted = false;
+    applyVolume();
 
     log('Audio unlocked');
     document.removeEventListener('click', unlockAudio);
@@ -146,6 +165,22 @@ function unlockAudio() {
 
 document.addEventListener('click', unlockAudio);
 document.addEventListener('keydown', unlockAudio);
+
+muteButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    isMuted = !isMuted;
+    muteButton.classList.toggle('is-muted', isMuted);
+    applyVolume();
+});
+
+volumeSlider.addEventListener('input', () => {
+    masterVolume = volumeSlider.value / 100;
+    if (masterVolume > 0 && isMuted) {
+        isMuted = false;
+        muteButton.classList.remove('is-muted');
+    }
+    applyVolume();
+});
 
 /* =========================================================================
  *  Initialize background screens
