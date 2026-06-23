@@ -10,6 +10,3 @@ build/
 tmp/
 temp/
 Media/Videos_Gaylords_Shop/
-Media/Processed_Gaylords_Shop/*
-!Media/Processed_Gaylords_Shop/.gitkeep
-Media/Game_Cabinet/*.mp4
