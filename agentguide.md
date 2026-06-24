@@ -68,6 +68,7 @@ Click handlers are wired automatically from config. `hideHotspots()`/`showHotspo
 - `pathways` -- object mapping pathway names to arrays of clip paths
 - `idleDelay` -- min/max milliseconds between idle clips
 - `baseClip` -- the looping alpha-masked idle WebM
+- `wakeClip` -- first-click startup animation (`wakes_up.webm`)
 
 ### Adding a New Background Screen
 
@@ -114,11 +115,15 @@ TV and Game Cabinet videos sit behind the alpha-masked base/foreground WebMs. Th
 States in `script.js`:
 
 ```text
+WAITING_WAKE         Startup state: wake clip held on first frame until first click
+PLAYING_WAKE         Wake clip plays once, then transitions to IDLE
 IDLE                 Base loop playing, waiting for random idle clip timer. Next clip preloaded.
 LOADING_IDLE_CLIP    Idle clip loading (canplay triggers playback)
 PLAYING_IDLE_CLIP    Idle clip playing over base (ends -> return to IDLE)
 PATHWAY              Pathway clip playing (pauses on final frame, back button visible)
 ```
+
+On initial page load, `wakes_up.webm` is loaded into `animation-player`, held on its first frame, and hotspots/idle scheduling are disabled. The first click anywhere on the page starts the wake clip and unlocks audio. When the wake clip ends, `startBaseIdleLoop()` and `scheduleNextIdleClip()` take over and the normal idle state begins.
 
 Idle clips start/end on the same base pose. Randomly chosen every 5-15s. The next idle clip is preloaded into a detached `<video>` element during the idle wait period for instant playback.
 

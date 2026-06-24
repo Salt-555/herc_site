@@ -74,6 +74,7 @@ const HOTSPOT_BASE = 1024;
 const CONFIG = {
     idleDelay: { min: 5000, max: 15000 },
     baseClip: `${MEDIA_PATH}Idle_photo.webm`,
+    wakeClip: `${MEDIA_PATH}wakes_up.webm`,
     idleClips: [
         { id: 'blink',      src: `${MEDIA_PATH}idle_blink.webm` },
         { id: 'speech-1',   src: `${MEDIA_PATH}idle_speech1.webm` },
@@ -94,6 +95,8 @@ const CONFIG = {
  * ======================================================================= */
 
 const State = {
+    WAITING_WAKE: 'waiting-wake',
+    PLAYING_WAKE: 'playing-wake',
     IDLE: 'idle',
     LOADING_IDLE_CLIP: 'loading-idle-clip',
     PLAYING_IDLE_CLIP: 'playing-idle-clip',
@@ -137,7 +140,7 @@ const TV_VHS_SCREEN = {
  *  Runtime state
  * ======================================================================= */
 
-let currentState = State.IDLE;
+let currentState = State.WAITING_WAKE;
 let lastIdleClipIndex = -1;
 let scheduledIdleTimeout = null;
 let activeIdleClip = null;
@@ -149,6 +152,7 @@ let isMuted = false;
 let activePathwayName = null;
 let cabinetIdleLayersSuppressed = false;
 let zoomIdleLayersSuppressed = false;
+let wakeStarted = false;
 
 /* =========================================================================
  *  Sound Engine
@@ -517,6 +521,53 @@ function playLoadedIdleClip() {
  *  State transitions
  * ======================================================================= */
 
+function prepareWakeSequence() {
+    currentState = State.WAITING_WAKE;
+    wakeStarted = false;
+    hideHotspots();
+    hideCabinetArcade();
+    hideTvVhsMenu();
+
+    animationPlayer.style.opacity = '1';
+    animationPlayer.loop = false;
+    animationPlayer.muted = true;
+    animationPlayer.src = CONFIG.wakeClip;
+    animationPlayer.load();
+
+    log('Wake clip loaded and waiting for first click');
+    document.addEventListener('click', startWakeSequence, { once: true });
+}
+
+function startWakeSequence() {
+    if (currentState !== State.WAITING_WAKE || wakeStarted) return;
+    wakeStarted = true;
+    currentState = State.PLAYING_WAKE;
+
+    animationPlayer.currentTime = 0;
+    animationPlayer.style.opacity = '1';
+    startBaseIdleLoop();
+
+    animationPlayer.play().catch((error) => {
+        log(`Wake clip play error: ${error.message}`);
+        finishWakeSequence();
+    });
+}
+
+function finishWakeSequence() {
+    if (currentState !== State.PLAYING_WAKE && currentState !== State.WAITING_WAKE) return;
+
+    currentState = State.IDLE;
+    animationPlayer.style.opacity = '0';
+    animationPlayer.pause();
+    animationPlayer.removeAttribute('src');
+    animationPlayer.load();
+
+    idleBasePlayer.style.opacity = '1';
+    hideBackButton();
+    showHotspots();
+    scheduleNextIdleClip();
+}
+
 function returnToIdle() {
     if (currentState === State.IDLE) return;
 
@@ -779,6 +830,13 @@ eyeOverlay.addEventListener('animationend', (event) => {
 });
 
 animationPlayer.addEventListener('canplay', () => {
+    if (currentState === State.WAITING_WAKE) {
+        animationPlayer.pause();
+        animationPlayer.currentTime = 0;
+        animationPlayer.style.opacity = '1';
+        return;
+    }
+
     if (currentState === State.LOADING_IDLE_CLIP) {
         playLoadedIdleClip();
         return;
@@ -793,6 +851,12 @@ animationPlayer.addEventListener('canplay', () => {
 });
 
 animationPlayer.addEventListener('ended', () => {
+    if (currentState === State.PLAYING_WAKE) {
+        log('Wake clip ended');
+        finishWakeSequence();
+        return;
+    }
+
     if (currentState === State.PLAYING_IDLE_CLIP) {
         log('Idle clip ended');
         returnToIdle();
@@ -845,8 +909,7 @@ window.addEventListener('load', () => {
     hideBackButton();
     updateLayout();
     SCREENS.forEach((screen) => playRandomChannel(screen));
-    startBaseIdleLoop();
-    scheduleNextIdleClip();
+    prepareWakeSequence();
 });
 
 characterDisplay.addEventListener('transitionend', updateLayout);
