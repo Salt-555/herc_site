@@ -263,25 +263,32 @@ function startVolumeFade() {
 }
 
 function ramp(current, target, dt) {
+    current = clampVolume(current);
+    target = clampVolume(target);
     const step = AUDIO_MIX.fadeSpeed * dt;
     if (current < target) return Math.min(current + step, target);
     if (current > target) return Math.max(current - step, target);
-    return Math.max(0, Math.min(1, target));
+    return target;
+}
+
+function clampVolume(value) {
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(1, value));
 }
 
 function commitVolumes() {
     /* Before first user gesture everything stays muted (autoplay policy) */
     if (!audioUnlocked) {
-        if (cabinetArcade) cabinetArcade.setAudioState({ muted: true, volume: masterVolume });
+        if (cabinetArcade) cabinetArcade.setAudioState({ muted: true, volume: clampVolume(masterVolume) });
         return;
     }
-    const m = isMuted ? 0 : masterVolume;
-    bgMusicPlayer.volume = volumeCurrent.bgMusic * m;
+    const m = isMuted ? 0 : clampVolume(masterVolume);
+    bgMusicPlayer.volume = clampVolume(volumeCurrent.bgMusic * m);
     SCREENS.forEach((s) => {
-        if (s.element) s.element.volume = s.volCurrent * m;
+        if (s.element) s.element.volume = clampVolume(s.volCurrent * m);
     });
-    animationPlayer.volume = volumeCurrent.character * m;
-    if (cabinetArcade) cabinetArcade.setAudioState({ muted: isMuted, volume: masterVolume });
+    animationPlayer.volume = clampVolume(volumeCurrent.character * m);
+    if (cabinetArcade) cabinetArcade.setAudioState({ muted: isMuted, volume: clampVolume(masterVolume) });
 }
 
 function applyVolume() {
@@ -323,7 +330,7 @@ muteButton.addEventListener('click', (e) => {
 });
 
 volumeSlider.addEventListener('input', () => {
-    masterVolume = volumeSlider.value / 100;
+    masterVolume = clampVolume(volumeSlider.value / 100);
     if (masterVolume > 0 && isMuted) {
         isMuted = false;
         muteButton.classList.remove('is-muted');
