@@ -8,6 +8,7 @@ Static browser animation site for Gaylord's Shop. No build step, no framework, n
 herc_site/
   index.html                         Main page (loads all layers + manifests)
   script.js                          State machine, data-driven screens/hotspots, preloading
+  arcade.js                          Interactive Game Cabinet arcade subsystem (Asteroach)
   styles.css                         Fullscreen layout, layer stack, clip-paths, eyelid animations
   smoke.js                           Independent canvas smoke particle effect
   screens.json                       Canonical screen geometry (referenced by JS and processing scripts)
@@ -95,11 +96,14 @@ z1    tv-player              Clipped TV background video (positioned via JS, cli
 z1    game-cabinet-player    Clipped game cabinet background video (same z-level, separate position)
 z2    idle-image             JPG fallback (1024x1024, always present for sizing/sceneRect)
 z3    idle-base-player       Looping base WebM with alpha holes for TV + cabinet
+z3    arcade-canvas          Interactive Asteroach canvas, visible only after Game Cabinet zoom ends
+z3    tv-vhs-menu            VHS-style Hercules Recycled 2.0 buy/rent menu after TV zoom ends
 z4    animation-player       Foreground idle/pathway clips (VP9 alpha)
 ---   bg-music-player        <audio> element — continuous background music (no visual layer)
 z100  smoke-canvas           Smoke particle overlay
 z150  hotspots               Invisible click zones (also hover zones for audio ducking)
 z200  back-button            Pathway-only Go Back button
+z210  arcade-controls        Context-sensitive cabinet game control guide
 z9999 eye-overlay            Opening/closing eyelids
 ```
 
@@ -119,6 +123,31 @@ PATHWAY              Pathway clip playing (pauses on final frame, back button vi
 Idle clips start/end on the same base pose. Randomly chosen every 5-15s. The next idle clip is preloaded into a detached `<video>` element during the idle wait period for instant playback.
 
 Pathway clips are triggered by hotspot clicks. Go Back closes eyelids, resets state to IDLE (no page reload), and re-opens eyelids via CSS animation restart.
+
+### Game Cabinet Arcade
+
+Clicking the Game Cabinet hotspot plays `Game_Zoom1.webm` as a special `gameZooms` pathway. During the first 25% of the zoom, the idle TV and Game Cabinet media remain visible for continuity. After 25%, those idle screen layers and the base idle layer are hidden/paused so the zoom transparency does not reveal the idle scene recursively.
+
+When the zoom clip ends, `arcade-canvas` becomes active behind the transparent cabinet screen and `arcade-controls` appears beside the scene. `arcade.js` owns the standalone interactive arcade system:
+- `createCabinetArcade({ canvas, guide })` returns `showMenu()`, `hide()`, and `setAudioState()` methods used by `script.js`
+- Current game: Asteroach, an Asteroids-style crude vector/pixel roach game
+- Controls: Enter/click starts, WASD/arrows move, Space/click fires, mouse aims, Esc returns to the in-cabinet menu
+- Go Back exits cabinet mode completely and returns to the normal idle state
+- SFX are generated with Web Audio chip sounds and respect the shared mute/master volume controls
+
+`arcade.js` renders gameplay to an offscreen canvas first, then draws it to the visible canvas in warped strips for CRT/barrel distortion. The visible arcade canvas is positioned by `CABINET_ARCADE_SCREEN` in `script.js` using 1440x1440 `Game_Zoom1` coordinates. CSS adds a perspective/skew transform only; do not reintroduce `clip-path` cropping for the arcade surface unless explicitly requested.
+
+### TV Zoom VHS Menu
+
+Clicking the TV hotspot plays `TV_zoom2.webm` as the `tvZooms` pathway. Like the Game Cabinet zoom, the idle TV and Game Cabinet media remain visible for the first 25% of the zoom for continuity. After 25%, those idle screen layers and the base idle layer are hidden/paused so the transparent TV close-up does not reveal recursive idle content.
+
+When the TV zoom clip ends, `tv-vhs-menu` becomes active behind the transparent TV screen. It shows a VHS-style menu for **HERCULES RECYCLED 2.0** with a buy/rent prompt linking to the Amazon Prime Video listing:
+
+```text
+https://www.amazon.com/Hercules-Recycled-2-0-Steve-Reeves/dp/B08DSS9TKD
+```
+
+`tv-vhs-menu` is positioned by `TV_VHS_SCREEN` in `script.js` using 1440x1440 `TV_zoom2` coordinates derived from `Media/Videos_Gaylords_Shop/TV zoom in mask.png`. Go Back exits TV zoom mode completely and returns to the normal idle state.
 
 ## Sound Engine
 
@@ -304,6 +333,7 @@ Transparent area should show `alpha=0`. Do NOT trust `ffprobe pix_fmt` alone.
 
 ```bash
 node --check script.js
+node --check arcade.js
 node --check smoke.js
 bash -n scripts/process-bg-tv.sh
 bash -n scripts/mask-gaylord-videos.sh
@@ -312,9 +342,11 @@ bash -n scripts/process-game-cabinet.sh
 
 ## Git / Deployment
 
-- `Media/Videos_Gaylords_Shop/` -- gitignored (source MP4s + TVMask.png, kept locally)
-- `Media/Processed_Gaylords_Shop/` -- gitignored except `.gitkeep` (regenerated via mask script)
-- `Media/Game_Cabinet/*.mp4` -- gitignored (source MP4s, kept locally)
-- `Media/Game_Cabinet/*.webm` -- committed (small processed clips, ~18-95KB each)
+- Cloudflare Pages deployment: framework preset `None`, no build command, output directory `/` or `.`
+- `Media/Videos_Gaylords_Shop/` -- gitignored source MP4s/masks, kept locally and not required for deploy
+- `Media/Processed_Gaylords_Shop/` -- committed processed WebM/JPG runtime assets; Cloudflare has no build step to regenerate them
+- `Media/Game_Cabinet/*.mp4` -- ignored source MP4s going forward, kept locally when possible
+- `Media/Game_Cabinet/*.webm` -- committed processed runtime clips
 - `Media/BG_TV/` -- committed (processed TV clips + manifest)
+- `Media/BG_Music/` -- committed background music tracks + manifest
 - Cache bust: bump query strings in `index.html` (`script.js?v=16`, `styles.css?v=8`, etc.)

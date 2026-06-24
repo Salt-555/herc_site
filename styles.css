@@ -90,6 +90,7 @@ body {
     left: 50%;
     transform: translate(-50%, -50%);
     transition: opacity 0.3s ease;
+    pointer-events: none;
 }
 
 .tv-video {
@@ -127,6 +128,180 @@ body {
 .character-video {
     z-index: 4;
     opacity: 0;
+}
+
+.arcade-canvas {
+    position: absolute;
+    z-index: 3;
+    width: 0;
+    height: 0;
+    background: #030502;
+    opacity: 0;
+    image-rendering: pixelated;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+    filter: saturate(1.18) brightness(1.08) drop-shadow(0 0 8px rgba(112, 255, 75, 0.32));
+    transform: perspective(520px) rotateX(1.5deg) rotateY(-5deg) skew(-1.5deg, 0.8deg);
+    transform-origin: center center;
+}
+
+.arcade-canvas.is-active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.tv-vhs-menu {
+    position: absolute;
+    z-index: 3;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 18px;
+    padding: 34px;
+    background:
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 5px),
+        radial-gradient(ellipse at center, rgba(105, 140, 255, 0.18), transparent 55%),
+        linear-gradient(135deg, #090417 0%, #13091f 46%, #050509 100%);
+    color: #f5f0ff;
+    font-family: 'Courier New', monospace;
+    text-align: center;
+    text-shadow: 0 0 8px rgba(180, 190, 255, 0.85), 2px 2px 0 rgba(255, 0, 120, 0.45);
+    image-rendering: pixelated;
+    filter: saturate(1.15) contrast(1.08) drop-shadow(0 0 12px rgba(120, 150, 255, 0.32));
+    transform: perspective(680px) rotateX(1.2deg) rotateY(0.8deg) skew(-0.7deg, 0.2deg);
+    transform-origin: center center;
+    transition: opacity 0.22s ease;
+}
+
+.tv-vhs-menu.is-active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.tv-vhs-menu::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(90deg, rgba(255, 0, 120, 0.08), transparent 18%, transparent 82%, rgba(0, 255, 255, 0.08)),
+        repeating-linear-gradient(0deg, transparent 0 13px, rgba(255, 255, 255, 0.06) 13px 14px);
+    mix-blend-mode: screen;
+}
+
+.vhs-tracking,
+.vhs-footer {
+    position: relative;
+    color: #a8f7ff;
+    font-size: clamp(11px, 1.7vw, 20px);
+    letter-spacing: 0.18em;
+}
+
+.vhs-title {
+    position: relative;
+    color: #fff7b8;
+    font-size: clamp(28px, 5vw, 74px);
+    font-weight: 900;
+    line-height: 0.92;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+.vhs-copy {
+    position: relative;
+    max-width: 72%;
+    margin: 0;
+    color: #d7e2ff;
+    font-size: clamp(12px, 1.7vw, 22px);
+    line-height: 1.25;
+}
+
+.vhs-action {
+    position: relative;
+    display: inline-block;
+    padding: 13px 18px;
+    border: 2px solid rgba(255, 247, 184, 0.82);
+    background: rgba(255, 247, 184, 0.12);
+    color: #fff7b8;
+    font-size: clamp(13px, 2vw, 26px);
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    text-transform: uppercase;
+    box-shadow: 0 0 18px rgba(255, 247, 184, 0.28), inset 0 0 14px rgba(255, 247, 184, 0.1);
+}
+
+.vhs-action:hover,
+.vhs-action:focus-visible {
+    background: rgba(255, 247, 184, 0.24);
+    outline: none;
+}
+
+.arcade-controls {
+    position: fixed;
+    top: 50%;
+    right: 26px;
+    z-index: 210;
+    width: min(260px, calc(100vw - 32px));
+    padding: 14px 16px;
+    transform: translateY(-50%);
+    border: 2px solid rgba(128, 255, 94, 0.72);
+    background:
+        radial-gradient(circle at 18% 12%, rgba(128, 255, 94, 0.16), transparent 28%),
+        linear-gradient(180deg, rgba(4, 16, 6, 0.94), rgba(0, 5, 2, 0.96));
+    color: #b8ff7b;
+    font: 700 13px/1.45 'Courier New', monospace;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-shadow: 0 0 7px rgba(128, 255, 94, 0.72);
+    box-shadow:
+        inset 0 0 18px rgba(128, 255, 94, 0.08),
+        0 0 22px rgba(62, 255, 76, 0.14),
+        0 8px 26px rgba(0, 0, 0, 0.72);
+}
+
+.arcade-controls::before {
+    content: 'CABINET INPUT';
+    display: block;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(128, 255, 94, 0.45);
+    color: #f5ffd0;
+    font-size: 15px;
+}
+
+.arcade-controls p {
+    margin: 0 0 8px;
+}
+
+.arcade-controls kbd {
+    display: inline-block;
+    min-width: 22px;
+    margin: 0 3px 3px 0;
+    padding: 2px 5px;
+    border: 1px solid rgba(245, 255, 208, 0.55);
+    background: rgba(245, 255, 208, 0.09);
+    color: #f5ffd0;
+    font: inherit;
+    text-align: center;
+}
+
+@media (max-width: 760px) {
+    .arcade-controls {
+        top: auto;
+        right: 12px;
+        bottom: 74px;
+        left: 12px;
+        width: auto;
+        transform: none;
+        font-size: 11px;
+    }
 }
 
 .shop-footer {

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gaylord's Shop</title>
-    <link rel="stylesheet" href="styles.css?v=11">
+    <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
     <div class="shop-container">
@@ -16,6 +16,14 @@
             <div id="character-display" class="character-wrapper">
                 <video id="tv-player" class="scene-media tv-video" muted playsinline loop preload="auto"></video>
                 <video id="game-cabinet-player" class="scene-media game-cabinet-video" muted playsinline loop preload="auto"></video>
+                <canvas id="arcade-canvas" class="arcade-canvas" width="770" height="632" hidden></canvas>
+                <div id="tv-vhs-menu" class="tv-vhs-menu" hidden>
+                    <div class="vhs-tracking">PLAY  SP  00:00:00</div>
+                    <div class="vhs-title">HERCULES<br>RECYCLED 2.0</div>
+                    <p class="vhs-copy">A redubbed sword-and-sandal transmission from the end of civilization.</p>
+                    <a class="vhs-action" href="https://www.amazon.com/Hercules-Recycled-2-0-Steve-Reeves/dp/B08DSS9TKD" target="_blank" rel="noopener">BUY / RENT ON AMAZON</a>
+                    <div class="vhs-footer">INSERT PAYMENT METHOD TO CONTINUE</div>
+                </div>
                 <img id="idle-image" src="Media/Processed_Gaylords_Shop/Idle_photo.jpg" alt="Gaylord" class="scene-media character-img">
                 <video id="idle-base-player" class="scene-media base-video" muted playsinline loop preload="auto" poster="Media/Processed_Gaylords_Shop/Idle_photo.jpg"></video>
                 <video id="animation-player" class="scene-media character-video" muted playsinline preload="auto"></video>
@@ -40,6 +48,7 @@
             </button>
             <input id="volume-slider" class="volume-slider" type="range" min="0" max="100" value="100" title="Volume">
         </div>
+        <aside id="arcade-controls" class="arcade-controls" hidden aria-live="polite"></aside>
         <canvas id="smoke-canvas" class="smoke-overlay"></canvas>
         <div id="eye-overlay" class="eye-overlay">
             <div class="eyelid eyelid-top"></div>
@@ -50,7 +59,8 @@
     <script src="Media/BG_TV/manifest.js?v=3"></script>
     <script src="Media/Game_Cabinet/manifest.js?v=1"></script>
     <script src="Media/BG_Music/manifest.js?v=1"></script>
-    <script src="script.js?v=22"></script>
+    <script src="arcade.js?v=1"></script>
+    <script src="script.js?v=23"></script>
     <script src="smoke.js?v=3"></script>
 </body>
 </html>

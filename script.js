@@ -110,6 +110,28 @@ const idleBasePlayer = document.getElementById('idle-base-player');
 const animationPlayer = document.getElementById('animation-player');
 const backButton = document.getElementById('back-button');
 const eyeOverlay = document.getElementById('eye-overlay');
+const arcadeCanvas = document.getElementById('arcade-canvas');
+const arcadeControls = document.getElementById('arcade-controls');
+const tvVhsMenu = document.getElementById('tv-vhs-menu');
+const cabinetArcade = window.createCabinetArcade
+    ? window.createCabinetArcade({ canvas: arcadeCanvas, guide: arcadeControls })
+    : null;
+
+const CABINET_ARCADE_SCREEN = {
+    baseSize: 1440,
+    left: 510,
+    top: 637,
+    width: 391,
+    height: 318
+};
+
+const TV_VHS_SCREEN = {
+    baseSize: 1440,
+    left: 302,
+    top: 284,
+    width: 898,
+    height: 664
+};
 
 /* =========================================================================
  *  Runtime state
@@ -124,6 +146,9 @@ let isReturningToIdle = false;
 let audioUnlocked = false;
 let masterVolume = 1.0;
 let isMuted = false;
+let activePathwayName = null;
+let cabinetIdleLayersSuppressed = false;
+let zoomIdleLayersSuppressed = false;
 
 /* =========================================================================
  *  Sound Engine
@@ -242,13 +267,17 @@ function ramp(current, target, dt) {
 
 function commitVolumes() {
     /* Before first user gesture everything stays muted (autoplay policy) */
-    if (!audioUnlocked) return;
+    if (!audioUnlocked) {
+        if (cabinetArcade) cabinetArcade.setAudioState({ muted: true, volume: masterVolume });
+        return;
+    }
     const m = isMuted ? 0 : masterVolume;
     bgMusicPlayer.volume = volumeCurrent.bgMusic * m;
     SCREENS.forEach((s) => {
         if (s.element) s.element.volume = s.volCurrent * m;
     });
     animationPlayer.volume = volumeCurrent.character * m;
+    if (cabinetArcade) cabinetArcade.setAudioState({ muted: isMuted, volume: masterVolume });
 }
 
 function applyVolume() {
@@ -375,7 +404,7 @@ const hotspotElements = HOTSPOTS.map((hs) => {
         const clips = CONFIG.pathways[hs.pathway];
         if (!clips || !clips.length) return;
         const clip = clips[getRandomIndex(clips)];
-        playPathwayClip(clip);
+        playPathwayClip(clip, hs.pathway);
     });
 
     return el;
@@ -493,6 +522,9 @@ function returnToIdle() {
 
     currentState = State.IDLE;
     activeIdleClip = null;
+    activePathwayName = null;
+    cabinetIdleLayersSuppressed = false;
+    zoomIdleLayersSuppressed = false;
 
     animationPlayer.style.opacity = '0';
     animationPlayer.pause();
@@ -500,9 +532,9 @@ function returnToIdle() {
     animationPlayer.load();
 
     idleBasePlayer.style.opacity = '1';
-    SCREENS.forEach((screen) => {
-        if (screen.channels.length) screen.element.style.opacity = '1';
-    });
+    hideCabinetArcade();
+    hideTvVhsMenu();
+    resumeBackgroundScreens();
 
     hideBackButton();
     showHotspots();
@@ -524,18 +556,120 @@ function startBaseIdleLoop() {
         });
 }
 
-function playPathwayClip(videoSrc) {
+function playPathwayClip(videoSrc, pathwayName) {
     clearScheduledIdleClip();
     hideHotspots();
     showBackButton();
 
     currentState = State.PATHWAY;
+    activePathwayName = pathwayName;
     log(`Playing pathway clip: ${videoSrc}`);
+
+    if (activePathwayName === 'gameZooms') {
+        enterCabinetArcadePathway();
+    } else if (activePathwayName === 'tvZooms') {
+        enterTvVhsPathway();
+    } else {
+        hideCabinetArcade();
+        hideTvVhsMenu();
+    }
 
     animationPlayer.style.opacity = '1';
     animationPlayer.loop = false;
     animationPlayer.src = videoSrc;
     animationPlayer.load();
+}
+
+function enterCabinetArcadePathway() {
+    setHoverTarget(null);
+    hideCabinetArcade();
+    hideTvVhsMenu();
+    cabinetIdleLayersSuppressed = false;
+    idleBasePlayer.style.opacity = '1';
+    SCREENS.forEach((screen) => {
+        screen.volTarget = 0;
+        if (screen.channels.length) screen.element.style.opacity = '1';
+    });
+    startVolumeFade();
+}
+
+function enterTvVhsPathway() {
+    setHoverTarget(null);
+    hideCabinetArcade();
+    hideTvVhsMenu();
+    zoomIdleLayersSuppressed = false;
+    idleBasePlayer.style.opacity = '1';
+    SCREENS.forEach((screen) => {
+        screen.volTarget = 0;
+        if (screen.channels.length) screen.element.style.opacity = '1';
+    });
+    startVolumeFade();
+}
+
+function suppressCabinetIdleLayers() {
+    if (cabinetIdleLayersSuppressed) return;
+    cabinetIdleLayersSuppressed = true;
+    idleBasePlayer.style.opacity = '0';
+    SCREENS.forEach((screen) => {
+        screen.volTarget = 0;
+        screen.element.pause();
+        screen.element.style.opacity = '0';
+    });
+    startVolumeFade();
+}
+
+function suppressTvIdleLayers() {
+    if (zoomIdleLayersSuppressed) return;
+    zoomIdleLayersSuppressed = true;
+    idleBasePlayer.style.opacity = '0';
+    SCREENS.forEach((screen) => {
+        screen.volTarget = 0;
+        screen.element.pause();
+        screen.element.style.opacity = '0';
+    });
+    startVolumeFade();
+}
+
+function showCabinetArcadeMenu() {
+    if (!cabinetArcade) return;
+    updateArcadePosition();
+    cabinetArcade.showMenu();
+}
+
+function hideCabinetArcade() {
+    if (cabinetArcade) cabinetArcade.hide();
+}
+
+function showTvVhsMenu() {
+    if (!tvVhsMenu) return;
+    updateTvVhsPosition();
+    tvVhsMenu.hidden = false;
+    tvVhsMenu.classList.add('is-active');
+}
+
+function hideTvVhsMenu() {
+    if (!tvVhsMenu) return;
+    tvVhsMenu.classList.remove('is-active');
+    tvVhsMenu.hidden = true;
+}
+
+function resumeBackgroundScreens() {
+    SCREENS.forEach((screen) => {
+        if (!screen.channels.length) {
+            screen.element.style.opacity = '0';
+            return;
+        }
+
+        screen.element.style.opacity = '1';
+        if (!screen.element.currentSrc) {
+            playRandomChannel(screen);
+            return;
+        }
+
+        screen.element.play().catch((error) => {
+            log(`${screen.id} resume error: ${error.message}`);
+        });
+    });
 }
 
 /* =========================================================================
@@ -588,6 +722,33 @@ function updateLayout() {
     SCREENS.forEach((screen) => {
         updateScreenPosition(screen, sceneRect);
     });
+
+    updateArcadePosition(sceneRect);
+    updateTvVhsPosition(sceneRect);
+}
+
+function updateArcadePosition(sceneRect = getSceneRect()) {
+    if (!arcadeCanvas) return;
+    const wrapperRect = characterDisplay.getBoundingClientRect();
+    const scaleX = sceneRect.width / CABINET_ARCADE_SCREEN.baseSize;
+    const scaleY = sceneRect.height / CABINET_ARCADE_SCREEN.baseSize;
+
+    arcadeCanvas.style.left = `${sceneRect.left - wrapperRect.left + CABINET_ARCADE_SCREEN.left * scaleX}px`;
+    arcadeCanvas.style.top = `${sceneRect.top - wrapperRect.top + CABINET_ARCADE_SCREEN.top * scaleY}px`;
+    arcadeCanvas.style.width = `${CABINET_ARCADE_SCREEN.width * scaleX}px`;
+    arcadeCanvas.style.height = `${CABINET_ARCADE_SCREEN.height * scaleY}px`;
+}
+
+function updateTvVhsPosition(sceneRect = getSceneRect()) {
+    if (!tvVhsMenu) return;
+    const wrapperRect = characterDisplay.getBoundingClientRect();
+    const scaleX = sceneRect.width / TV_VHS_SCREEN.baseSize;
+    const scaleY = sceneRect.height / TV_VHS_SCREEN.baseSize;
+
+    tvVhsMenu.style.left = `${sceneRect.left - wrapperRect.left + TV_VHS_SCREEN.left * scaleX}px`;
+    tvVhsMenu.style.top = `${sceneRect.top - wrapperRect.top + TV_VHS_SCREEN.top * scaleY}px`;
+    tvVhsMenu.style.width = `${TV_VHS_SCREEN.width * scaleX}px`;
+    tvVhsMenu.style.height = `${TV_VHS_SCREEN.height * scaleY}px`;
 }
 
 /* =========================================================================
@@ -641,7 +802,21 @@ animationPlayer.addEventListener('ended', () => {
     if (currentState === State.PATHWAY) {
         log('Pathway clip ended');
         animationPlayer.pause();
+        if (activePathwayName === 'gameZooms') suppressCabinetIdleLayers();
+        if (activePathwayName === 'gameZooms') showCabinetArcadeMenu();
+        if (activePathwayName === 'tvZooms') suppressTvIdleLayers();
+        if (activePathwayName === 'tvZooms') showTvVhsMenu();
     }
+});
+
+animationPlayer.addEventListener('timeupdate', () => {
+    if (currentState !== State.PATHWAY) return;
+    if (activePathwayName !== 'gameZooms' && activePathwayName !== 'tvZooms') return;
+    if (!Number.isFinite(animationPlayer.duration) || animationPlayer.duration <= 0) return;
+    if (animationPlayer.currentTime < animationPlayer.duration * 0.25) return;
+
+    if (activePathwayName === 'gameZooms') suppressCabinetIdleLayers();
+    if (activePathwayName === 'tvZooms') suppressTvIdleLayers();
 });
 
 animationPlayer.addEventListener('error', () => {
