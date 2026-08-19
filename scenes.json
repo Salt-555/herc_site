@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "note": "Canonical scene-graph registry for the site. Machine source of truth. Human/creative details (descriptions, build-out options) live in scenes/<scene-path>/SCENE.md — do NOT duplicate mechanical facts here and there. scene ID = lowercase kebab-case path from root 'idle'. A node's mask is inherited from the nearest ancestor that defines one. Terminal kinds: idle | menu | game | fork.",
+  "scenes": {
+    "idle": {
+      "title": "Wide shop shot",
+      "parent": null,
+      "terminal": "idle",
+      "assets": {
+        "base": "Media/Processed/idle/base.webm",
+        "extras": [
+          "Media/Processed/idle/speech1.webm"
+        ],
+        "mask": "Media/Sources/idle/mask.png"
+      },
+      "hotspots": [
+        {
+          "id": "tv",
+          "target": "idle/tv",
+          "rect": { "left": 142, "top": 352, "width": 173, "height": 128 }
+        },
+        {
+          "id": "cabinet",
+          "target": "idle/cabinet",
+          "rect": { "left": 726, "top": 410, "width": 203, "height": 290 }
+        }
+      ]
+    },
+    "idle/tv": {
+      "title": "TV zoom - VHS menu",
+      "parent": "idle",
+      "terminal": "menu",
+      "assets": {
+        "base": "Media/Processed/idle/tv/base.webm",
+        "mask": "Media/Sources/idle/tv/mask.png"
+      },
+      "hotspots": []
+    },
+    "idle/cabinet": {
+      "title": "Game cabinet zoom - Asteroach",
+      "parent": "idle",
+      "terminal": "game",
+      "game": "arcade.js",
+      "assets": {
+        "base": "Media/Processed/idle/cabinet/base.webm",
+        "mask": "Media/Sources/idle/cabinet/mask.png"
+      },
+      "hotspots": []
+    }
+  }
+}
