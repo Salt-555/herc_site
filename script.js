@@ -1,4 +1,5 @@
-const MEDIA_PATH = 'Media/Processed_Gaylords_Shop/';
+// Scene-graph media: Media/Processed/<scene-path>/<role>.<ext>
+const MEDIA = (scene, role = 'base', ext = 'webm') => `Media/Processed/${scene}/${role}.${ext}`;
 
 /* =========================================================================
  *  Coordinate helper — converts from any source coordinate space to
@@ -73,20 +74,20 @@ const HOTSPOT_BASE = 1024;
 
 const CONFIG = {
     idleDelay: { min: 5000, max: 15000 },
-    baseClip: `${MEDIA_PATH}Idle_photo.webm`,
-    wakeClip: `${MEDIA_PATH}wakes_up.webm`,
+    baseClip: MEDIA('idle', 'base'),
+    wakeClip: MEDIA('idle', 'wakes_up'),
     idleClips: [
-        { id: 'blink',      src: `${MEDIA_PATH}idle_blink.webm` },
-        { id: 'speech-1',   src: `${MEDIA_PATH}idle_speech1.webm` },
-        { id: 'speech-2',   src: `${MEDIA_PATH}idle_speech2.webm` },
-        { id: 'speech-3',   src: `${MEDIA_PATH}idle_speech3.webm` },
-        { id: 'gun-threat', src: `${MEDIA_PATH}idle_gun_threat.webm` },
-        { id: 'butt-itch',  src: `${MEDIA_PATH}butt_itch.webm` }
+        { id: 'blink',      src: MEDIA('idle', 'idle_blink') },
+        { id: 'speech-1',   src: MEDIA('idle', 'idle_speech1') },
+        { id: 'speech-2',   src: MEDIA('idle', 'idle_speech2') },
+        { id: 'speech-3',   src: MEDIA('idle', 'idle_speech3') },
+        { id: 'gun-threat', src: MEDIA('idle', 'idle_gun_threat') },
+        { id: 'butt-itch',  src: MEDIA('idle', 'butt_itch') }
     ],
     pathways: {
-        sleep: [`${MEDIA_PATH}falls_asleep.webm`],
-        tvZooms: [`${MEDIA_PATH}TV_zoom2.webm`],
-        gameZooms: [`${MEDIA_PATH}Game_Zoom1.webm`]
+        sleep: [MEDIA('idle', 'falls_asleep')],
+        tvZooms: [MEDIA('idle/tv')],
+        gameZooms: [MEDIA('idle/cabinet')]
     }
 };
 

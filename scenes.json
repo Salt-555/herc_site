@@ -9,7 +9,14 @@
       "assets": {
         "base": "Media/Processed/idle/base.webm",
         "extras": [
-          "Media/Processed/idle/speech1.webm"
+          "Media/Processed/idle/wakes_up.webm",
+          "Media/Processed/idle/idle_blink.webm",
+          "Media/Processed/idle/idle_speech1.webm",
+          "Media/Processed/idle/idle_speech2.webm",
+          "Media/Processed/idle/idle_speech3.webm",
+          "Media/Processed/idle/idle_gun_threat.webm",
+          "Media/Processed/idle/butt_itch.webm",
+          "Media/Processed/idle/falls_asleep.webm"
         ],
         "mask": "Media/Sources/idle/mask.png"
       },

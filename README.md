@@ -29,9 +29,9 @@ bash -n scripts/process-game-cabinet.sh
 Required deploy assets include:
 
 - `index.html`, `styles.css`, `script.js`, `arcade.js`, `smoke.js`
-- `Media/Processed_Gaylords_Shop/` WebM/JPG files
+- `Media/Processed/<scene-path>/` WebM/JPG files (scene media under the scene-graph layout)
 - `Media/BG_TV/` WebM files and `manifest.js`
 - `Media/Game_Cabinet/` WebM files and `manifest.js`
 - `Media/BG_Music/` audio files and `manifest.js`
 
-Source media in `Media/Videos_Gaylords_Shop/` is intentionally ignored and not required by Cloudflare Pages.
+Source media in `Media/Sources/<scene-path>/` is intentionally ignored and not required by Cloudflare Pages.

@@ -95,22 +95,22 @@ for input in "${videos[@]}"; do
         continue
     fi
 
-    dimensions=$(ffprobe -v error -select_streams v:0 \
-        -show_entries stream=width,height \
-        -of csv=s=x:p=0 "$input")
+    width=$(ffprobe -v error -select_streams v:0 \
+        -show_entries stream=width \
+        -of default=noprint_wrappers=1:nokey=1 "$input")
+    height=$(ffprobe -v error -select_streams v:0 \
+        -show_entries stream=height \
+        -of default=noprint_wrappers=1:nokey=1 "$input")
     framerate=$(ffprobe -v error -select_streams v:0 \
         -show_entries stream=r_frame_rate \
         -of default=noprint_wrappers=1:nokey=1 "$input")
     duration=$(ffprobe -v error -show_entries format=duration \
         -of default=noprint_wrappers=1:nokey=1 "$input")
 
-    if [ -z "$dimensions" ] || [ -z "$framerate" ] || [ -z "$duration" ]; then
+    if [ -z "$width" ] || [ -z "$height" ] || [ -z "$framerate" ] || [ -z "$duration" ]; then
         printf '[WARN] Could not read metadata for %s\n' "$rel" >&2
         continue
     fi
-
-    width=${dimensions%x*}
-    height=${dimensions#*x}
 
     printf '[MASK] %s -> %s (%sx%s @ %s fps)  mask=%s\n' \
         "$rel" "$output" "$width" "$height" "$framerate" \
