@@ -2,11 +2,24 @@
 set -euo pipefail
 shopt -s nullglob
 
+# Alpha-mask pipeline for the scene-graph media layout.
+#
+# Input:  every *.mp4 under Media/Sources/<scene-path>/   (gitignored)
+# Output: alpha-masked VP9 WebM at Media/Processed/<scene-path>/   (committed)
+#
+# Mask routing (nearest-ancestor inheritance):
+#   Each scene dir may contain a mask.png. A clip's mask is the nearest
+#   mask.png found by walking up from the clip's own directory toward
+#   Media/Sources/. So idle/tv/base.mp4 checks Media/Sources/idle/tv/mask.png
+#   first, then Media/Sources/idle/mask.png. Only nodes whose geometry
+#   actually differs need their own mask.png.
+#
+# Source audio is preserved when present (libopus 64k @ volume 0.7).
+
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
-SOURCE_DIR="$REPO_ROOT/Media/Videos_Gaylords_Shop"
-OUTPUT_DIR="$REPO_ROOT/Media/Processed_Gaylords_Shop"
-MASK="$SOURCE_DIR/TVMask.png"
+SOURCE_DIR="$REPO_ROOT/Media/Sources"
+OUTPUT_DIR="$REPO_ROOT/Media/Processed"
 CRF=${CRF:-28}
 FORCE=${FORCE:-0}
 LIMIT=${LIMIT:-0}
@@ -29,28 +42,56 @@ if ! command -v ffprobe >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ ! -f "$MASK" ]; then
-    printf '[FAIL] Mask not found: %s\n' "$MASK" >&2
+if [ ! -d "$SOURCE_DIR" ]; then
+    printf '[FAIL] Source dir not found: %s\n' "$SOURCE_DIR" >&2
+    printf '       Drop source MP4s + mask.png under Media/Sources/<scene-path>/\n' >&2
     exit 1
 fi
 
-mkdir -p "$OUTPUT_DIR"
+# Resolve the nearest ancestor mask.png for a given scene directory.
+# Returns empty string if no mask exists anywhere up the tree.
+resolve_mask() {
+    local dir="$1"
+    local d="$dir"
+    while :; do
+        if [ -f "$d/mask.png" ]; then
+            printf '%s/mask.png' "$d"
+            return 0
+        fi
+        if [ "$d" = "$SOURCE_DIR" ]; then
+            break
+        fi
+        d=$(dirname -- "$d")
+    done
+    return 0
+}
 
-videos=("$SOURCE_DIR"/*.mp4)
+# Collect source clips recursively (mp4 only).
+mapfile -t videos < <(find "$SOURCE_DIR" -type f -name '*.mp4' | sort)
 if [ "${#videos[@]}" -eq 0 ]; then
-    printf '[WARN] No MP4 files found in %s\n' "$SOURCE_DIR"
+    printf '[WARN] No MP4 files found under %s\n' "$SOURCE_DIR"
     exit 0
 fi
 
 processed=0
 
 for input in "${videos[@]}"; do
-    filename=$(basename -- "$input")
-    base=${filename%.*}
-    output="$OUTPUT_DIR/$base.webm"
+    # scene path relative to Sources, e.g. idle/tv/base.mp4 -> rel dir idle/tv
+    rel=${input#"$SOURCE_DIR"/}
+    scene_dir_rel=$(dirname -- "$rel")
+    base=$(basename -- "$rel")
+    base=${base%.mp4}
+    scene_dir=$(dirname -- "$input")
+    output="$OUTPUT_DIR/$scene_dir_rel/$base.webm"
+
+    mask=$(resolve_mask "$scene_dir")
+    if [ -z "$mask" ]; then
+        printf '[SKIP] %s: no mask.png found up the scene tree (root has none)\n' "$rel" >&2
+        continue
+    fi
 
     if [ -f "$output" ] && [ "$FORCE" != "1" ]; then
-        printf '[SKIP] %s already exists\n' "$base.webm"
+        printf '[SKIP] %s already exists\n' "$rel -> $base.webm"
         continue
     fi
 
@@ -64,14 +105,16 @@ for input in "${videos[@]}"; do
         -of default=noprint_wrappers=1:nokey=1 "$input")
 
     if [ -z "$dimensions" ] || [ -z "$framerate" ] || [ -z "$duration" ]; then
-        printf '[WARN] Could not read metadata for %s\n' "$input" >&2
+        printf '[WARN] Could not read metadata for %s\n' "$rel" >&2
         continue
     fi
 
     width=${dimensions%x*}
     height=${dimensions#*x}
 
-    printf '[MASK] %s -> %s (%sx%s @ %s fps)\n' "$filename" "$base.webm" "$width" "$height" "$framerate"
+    printf '[MASK] %s -> %s (%sx%s @ %s fps)  mask=%s\n' \
+        "$rel" "$output" "$width" "$height" "$framerate" \
+        "${mask#"$SOURCE_DIR"/}"
 
     if [ "$DRY_RUN" = "1" ]; then
         processed=$((processed + 1))
@@ -88,11 +131,12 @@ for input in "${videos[@]}"; do
     # Step 1: Extract RGBA PNG frames with mask alpha applied
     frame_dir="$TEMP_DIR/$base"
     mkdir -p "$frame_dir"
+    mkdir -p "$(dirname -- "$output")"
 
     printf '  [1/2] Extracting masked RGBA frames...\n'
     ffmpeg -y \
         -i "$input" \
-        -loop 1 -t "$duration" -i "$MASK" \
+        -loop 1 -t "$duration" -i "$mask" \
         -filter_complex \
             "[1:v]scale=${width}:${height}:flags=lanczos,format=rgba[mask];[0:v]format=rgba[vid];[vid][mask]blend=all_mode=and:all_opacity=1:all_expr='A*B/255',format=rgba[out]" \
         -map "[out]" \

@@ -229,7 +229,15 @@ Canonical source for all geometry: `screens.json`. Processing scripts reference 
 
 ## Alpha Mask Pipeline (Two-Step)
 
-All character WebMs are generated from source MP4s using `scripts/mask-gaylord-videos.sh`:
+All character WebMs are generated from source MP4s using `scripts/mask-gaylord-videos.sh`.
+
+**Layout & mask routing:** source clips live under `Media/Sources/<scene-path>/`
+(gitignored) and output to `Media/Processed/<scene-path>/` (committed). Each
+scene directory may contain a `mask.png`; the script resolves each clip's mask
+by walking up from the clip's own directory to the nearest `mask.png`, so a
+child inherits its nearest ancestor's mask unless it defines its own (only
+nodes whose geometry actually differs need a custom `mask.png`). Source audio
+is preserved when present.
 
 **Step 1** -- Extract RGBA PNG frames with mask alpha applied:
 ```bash
