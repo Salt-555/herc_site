@@ -1,5 +1,7 @@
 // Scene-graph media: Media/Processed/<scene-path>/<role>.<ext>
-const MEDIA = (scene, role = 'base', ext = 'webm') => `Media/Processed/${scene}/${role}.${ext}`;
+// MEDIA_VER busts browser/CDN cache when runtime media changes (increment it).
+const MEDIA_VER = 1;
+const MEDIA = (scene, role = 'base', ext = 'webm') => `Media/Processed/${scene}/${role}.${ext}?v=${MEDIA_VER}`;
 
 /* =========================================================================
  *  Coordinate helper — converts from any source coordinate space to
