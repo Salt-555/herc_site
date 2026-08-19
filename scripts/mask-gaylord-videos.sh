@@ -4,15 +4,17 @@ shopt -s nullglob
 
 # Alpha-mask pipeline for the scene-graph media layout.
 #
-# Input:  every *.mp4 under Media/Sources/<scene-path>/   (gitignored)
-# Output: alpha-masked VP9 WebM at Media/Processed/<scene-path>/   (committed)
+# SCOPE: this script masks ONLY the root idle scene clips
+# (Media/Sources/idle/). Those have a constant cutout (TV + cabinet holes) that
+# is correct across every frame. Zoom/terminal scene clips (idle/tv/,
+# idle/cabinet/, any deeper scene) are NOT masked here — their cutout timing is
+# scene-specific and handled by custom conditions. They are detected and
+# skipped with a notice, never touched.
 #
-# Mask routing (nearest-ancestor inheritance):
-#   Each scene dir may contain a mask.png. A clip's mask is the nearest
-#   mask.png found by walking up from the clip's own directory toward
-#   Media/Sources/. So idle/tv/base.mp4 checks Media/Sources/idle/tv/mask.png
-#   first, then Media/Sources/idle/mask.png. Only nodes whose geometry
-#   actually differs need their own mask.png.
+# Input:  *.mp4 directly under Media/Sources/idle/   (gitignored)
+# Output: alpha-masked VP9 WebM at Media/Processed/idle/   (committed)
+#
+# Mask: the root idle scene's mask.png (resolved via nearest-ancestor lookup).
 #
 # Source audio is preserved when present (libopus 64k @ volume 0.7).
 
@@ -20,6 +22,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
 SOURCE_DIR="$REPO_ROOT/Media/Sources"
 OUTPUT_DIR="$REPO_ROOT/Media/Processed"
+IDLE_SCENE="idle"    # the root idle scene — the only one this script masks
 CRF=${CRF:-28}
 FORCE=${FORCE:-0}
 LIMIT=${LIMIT:-0}
@@ -74,6 +77,7 @@ if [ "${#videos[@]}" -eq 0 ]; then
 fi
 
 processed=0
+skipped_custom=0
 
 for input in "${videos[@]}"; do
     # scene path relative to Sources, e.g. idle/tv/base.mp4 -> rel dir idle/tv
@@ -83,6 +87,14 @@ for input in "${videos[@]}"; do
     base=${base%.mp4}
     scene_dir=$(dirname -- "$input")
     output="$OUTPUT_DIR/$scene_dir_rel/$base.webm"
+
+    # Only mask the root idle scene. Zoom/terminal scenes have custom
+    # cutout timing and are intentionally left untouched.
+    if [ "$scene_dir_rel" != "$IDLE_SCENE" ]; then
+        printf '[SKIP] %s — custom scene (%s), not masked by this pipeline\n' "$rel" "$scene_dir_rel" >&2
+        skipped_custom=$((skipped_custom + 1))
+        continue
+    fi
 
     mask=$(resolve_mask "$scene_dir")
     if [ -z "$mask" ]; then
@@ -185,4 +197,7 @@ for input in "${videos[@]}"; do
     fi
 done
 
-printf '[OK] Processed %s videos. Output: %s\n' "$processed" "$OUTPUT_DIR"
+printf '[OK] Processed %s idle-scene videos. Output: %s\n' "$processed" "$OUTPUT_DIR"
+if [ "$skipped_custom" -gt 0 ]; then
+    printf '[NOTE] Skipped %s custom-scene clip(s) (zoom/terminal) — handle those separately.\n' "$skipped_custom"
+fi
