@@ -761,8 +761,35 @@ function hideBackButton() {
  *  Layout — positions hotspots and background screens
  * ======================================================================= */
 
+// Returns the rect (in viewport coords) of the VISIBLE image content.
+// The idle image is object-fit:contain, so on a mismatched wrapper (e.g.
+// portrait phone) the actual scene content is letterboxed — smaller than the
+// element box and centered. All screens/hotspots must position against the
+// CONTENT rect, not the full element box, or they misalign with the cutouts.
 function getSceneRect() {
-    return idleImage.getBoundingClientRect();
+    const box = idleImage.getBoundingClientRect();
+    if (!idleImage.naturalWidth || !idleImage.naturalHeight) return box;
+
+    const imgAspect = idleImage.naturalWidth / idleImage.naturalHeight;
+    const boxAspect = box.width / box.height;
+
+    let w, h;
+    if (boxAspect > imgAspect) {
+        // box is wider than image -> height-limited, centered horizontally
+        h = box.height;
+        w = box.height * imgAspect;
+    } else {
+        // box is taller than image -> width-limited, centered vertically
+        w = box.width;
+        h = box.width / imgAspect;
+    }
+
+    return {
+        left: box.left + (box.width - w) / 2,
+        top: box.top + (box.height - h) / 2,
+        width: w,
+        height: h
+    };
 }
 
 function updateLayout() {
