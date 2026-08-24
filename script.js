@@ -179,8 +179,8 @@ let wakeStarted = false;
  * ======================================================================= */
 
 const AUDIO_MIX = {
-    bgDefault:     0.075,   // BG music volume when nothing is hovered
-    bgDucked:      0.035,   // BG music volume when hovering a screen
+    bgDefault:     0.0375,  // BG music volume when nothing is hovered
+    bgDucked:      0.0175,  // BG music volume when hovering a screen
     charDefault:   0.7,     // Character clip volume when nothing is hovered
     charDucked:    0.3,     // Character clip volume when hovering a screen
     screenFocused: 0.4,     // Screen volume when hovered (full)
