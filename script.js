@@ -77,17 +77,24 @@ const HOTSPOT_BASE = 1024;
 const CONFIG = {
     idleDelay: { min: 5000, max: 15000 },
     baseClip: MEDIA('idle', 'base'),
-    wakeClip: MEDIA('idle', 'wakes_up'),
+    wakeClip: MEDIA('idle', 'base'),
     idleClips: [
-        { id: 'blink',      src: MEDIA('idle', 'idle_blink') },
-        { id: 'speech-1',   src: MEDIA('idle', 'idle_speech1') },
-        { id: 'speech-2',   src: MEDIA('idle', 'idle_speech2') },
-        { id: 'speech-3',   src: MEDIA('idle', 'idle_speech3') },
-        { id: 'gun-threat', src: MEDIA('idle', 'idle_gun_threat') },
-        { id: 'butt-itch',  src: MEDIA('idle', 'butt_itch') }
+        { id: 'amess',            src: MEDIA('idle', 'AMess') },
+        { id: 'barely-do-crime',  src: MEDIA('idle', 'BarelyDoCrime') },
+        { id: 'best-stuff-in-town', src: MEDIA('idle', 'BestStuffInTown') },
+        { id: 'brave-sip',        src: MEDIA('idle', 'BraveSip') },
+        { id: 'films-from-80s',   src: MEDIA('idle', 'FilmsFrom80s') },
+        { id: 'glad-you-didnt-get-mugged', src: MEDIA('idle', 'GladYouDidntGetMugged') },
+        { id: 'going-to-just-stand-there', src: MEDIA('idle', 'GoingToJustStandThere') },
+        { id: 'most-of-the-stuff', src: MEDIA('idle', 'MostOfTheStuff') },
+        { id: 'really-good-movie', src: MEDIA('idle', 'ReallyGoodMovie') },
+        { id: 'so-brave',         src: MEDIA('idle', 'SoBrave') },
+        { id: 'sponsorship',      src: MEDIA('idle', 'Sponsorship') },
+        { id: 'smell-of-plastic', src: MEDIA('idle', 'TheSmellOfPlastic') },
+        { id: 'want-to-watch-my-movie', src: MEDIA('idle', 'WantToWatchMyMovie') },
+        { id: 'whats-the-holdup', src: MEDIA('idle', 'WhatsTheHoldup') }
     ],
     pathways: {
-        sleep: [MEDIA('idle', 'falls_asleep')],
         tvZooms: [MEDIA('idle/tv')],
         gameZooms: [MEDIA('idle/cabinet')]
     }
