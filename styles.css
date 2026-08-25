@@ -298,45 +298,11 @@ body {
     .arcade-controls {
         top: auto;
         right: 12px;
-        bottom: 44px;
+        bottom: 74px;
         left: 12px;
         width: auto;
         transform: none;
         font-size: 11px;
-        max-height: 36vh;
-        overflow-y: auto;
-    }
-
-    /* Compact the VHS menu so it fits entirely inside the small on-screen TV
-       box on phones (box scales with the scene, so shrink the type/gaps). */
-    .tv-vhs-menu {
-        gap: 6px;
-        padding: 12px;
-    }
-    .vhs-title {
-        font-size: clamp(16px, 4.2vw, 24px);
-    }
-    .vhs-copy {
-        font-size: 11px;
-        max-width: 100%;
-        line-height: 1.2;
-    }
-    .vhs-action {
-        font-size: 11px;
-        padding: 8px 12px;
-        letter-spacing: 0.04em;
-    }
-    .vhs-tracking,
-    .vhs-footer {
-        font-size: 9px;
-        letter-spacing: 0.1em;
-    }
-
-    /* Ensure click zones stay above the minimum touch-target size even
-       though JS scales them to the (small) scene on phones. */
-    .hotspot {
-        min-width: 44px;
-        min-height: 44px;
     }
 }
 
