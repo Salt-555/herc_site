@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>HEVC alpha probe</title>
+<style>
+    body { background: #2244aa; margin: 0; padding: 20px; font-family: monospace; color: #fff; }
+    p { max-width: 600px; line-height: 1.4; }
+    video { width: 90vw; max-width: 500px; display: block; margin: 12px 0; background: #2244aa; }
+    #status { color: #ffdd55; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h2>HEVC-with-alpha probe (Plan B Task 1)</h2>
+<p>If the video below shows the shop WITH transparency around the character (blue page showing through), HEVC alpha works on this device. If it is a black box, does not play, or shows black rectangles, it does not.</p>
+<video id="v" playsinline muted loop autoplay src="Media/Processed/idle/base_hevc_test.mp4"></video>
+<div id="status">checking...</div>
+<script>
+    const v = document.getElementById('v');
+    const status = document.getElementById('status');
+    const lines = [];
+    function report() {
+        status.textContent = [
+            'canPlay hvc1: ' + (v.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"') || '(empty)'),
+            'canPlay hvc1 generic: ' + (v.canPlayType('video/mp4; codecs="hvc1"') || '(empty)'),
+            'readyState: ' + v.readyState,
+            'videoWidth: ' + v.videoWidth + 'x' + v.videoHeight,
+            'error: ' + (v.error ? v.error.code + ' / ' + v.error.message : 'none'),
+            'paused: ' + v.paused,
+            '',
+            ...lines
+        ].join('\n');
+    }
+    v.addEventListener('loadedmetadata', () => { lines.push('event: loadedmetadata'); report(); });
+    v.addEventListener('error', () => { lines.push('event: ERROR'); report(); });
+    v.addEventListener('playing', () => { lines.push('event: playing'); report(); });
+    report();
+    setTimeout(report, 2000);
+    setTimeout(report, 5000);
+</script>
+</body>
+</html>
