@@ -8,6 +8,12 @@
  * full-viewport element, so a plain 100%-element mask would mismatch. We
  * size/position the mask to the letterboxed content rect (same math as
  * getSceneRect) using mask-position + mask-size.
+ *
+ * Self-healing: masks are often applied before media has a src / metadata,
+ * so element boxes are the browser default (300x150) and geometry is garbage.
+ * Applied masks are tracked in a WeakMap and recomputed on video
+ * 'loadedmetadata'/'loadeddata' and window 'resize', always from the CURRENT
+ * box + videoWidth/Height.
  */
 
 (function () {
@@ -47,6 +53,33 @@
         return `url("${url}?v=${MASK_VER}")`;
     }
 
+    // element -> maskSrc for every live applied mask
+    const appliedMasks = new WeakMap();
+
+    // Re-run the mask-size/position math from the CURRENT box + media size.
+    function recomputeGeometry(video) {
+        const maskSrc = appliedMasks.get(video);
+        if (!maskSrc) return;
+        applyContentMask(video, maskSrc);
+    }
+
+    function onMediaGeometryChange(event) {
+        recomputeGeometry(event.target);
+    }
+
+    function onWindowResize() {
+        // WeakMap is not iterable; registered elements tag themselves with a marker
+        // attribute so we can find them. Cheap: only masked videos carry it.
+        document.querySelectorAll('[data-ios-mask]').forEach(recomputeGeometry);
+    }
+
+    let resizeListenerInstalled = false;
+    function ensureWindowResizeListener() {
+        if (resizeListenerInstalled) return;
+        window.addEventListener('resize', onWindowResize);
+        resizeListenerInstalled = true;
+    }
+
     // Apply a mask sized/positioned to the letterboxed content rect of `video`.
     // The mask image is assumed to match the media's square 1024x1024 space.
     function applyContentMask(video, maskSrc) {
@@ -67,6 +100,15 @@
         video.style.maskRepeat = 'no-repeat';
         video.style.webkitMaskPosition = `${left}px ${top}px`;
         video.style.maskPosition = `${left}px ${top}px`;
+
+        const isNew = appliedMasks.get(video) !== maskSrc;
+        appliedMasks.set(video, maskSrc);
+        video.setAttribute('data-ios-mask', maskSrc);
+        if (isNew) {
+            video.addEventListener('loadedmetadata', onMediaGeometryChange);
+            video.addEventListener('loadeddata', onMediaGeometryChange);
+            ensureWindowResizeListener();
+        }
     }
 
     function clearContentMask(video) {
@@ -74,6 +116,12 @@
         ['webkitMaskImage', 'maskImage', 'webkitMaskSize', 'maskSize',
             'webkitMaskRepeat', 'maskRepeat', 'webkitMaskPosition', 'maskPosition']
             .forEach((prop) => { video.style[prop] = ''; });
+        if (appliedMasks.get(video)) {
+            appliedMasks.delete(video);
+            video.removeAttribute('data-ios-mask');
+            video.removeEventListener('loadedmetadata', onMediaGeometryChange);
+            video.removeEventListener('loadeddata', onMediaGeometryChange);
+        }
     }
 
     window.IOSMasking = {

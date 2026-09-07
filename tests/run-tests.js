@@ -26,6 +26,23 @@ function serve() {
 const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
 
+function maskGeom(el) {
+  const cs = getComputedStyle(el);
+  const box = el.getBoundingClientRect();
+  return {
+    img: cs.webkitMaskImage || cs.maskImage,
+    size: cs.webkitMaskSize || cs.maskSize,
+    pos: cs.webkitMaskPosition || cs.maskPosition,
+    box: { w: box.width, h: box.height, left: box.left, top: box.top },
+    vw: el.videoWidth, vh: el.videoHeight,
+  };
+}
+
+function expectedGeom(g) {
+  const f = window.IOSMasking.contentRectFraction(g.vw || 1024, g.vh || 1024, g.box.w, g.box.h);
+  return { w: f.width * g.box.w, h: f.height * g.box.h, left: f.left * g.box.w };
+}
+
 // --- Fix 1: hotspot geometry must refresh when idle image loads ---
 const VIEWPORT = { width: 375, height: 667 }; // phone-ish, non-square
 
@@ -180,6 +197,119 @@ test('fix4b: pathway mask absent during zoom, applied on ended', async ({ page }
     return cs.webkitMaskImage || cs.maskImage;
   });
   if (!after || after === 'none' || !after.includes('idle/tv/mask.png')) throw new Error(`mask not applied on ended: "${after}"`);
+});
+
+// --- Fix 6: self-healing mask geometry (recompute on metadata/resize) ---
+
+test('fix6a: Safari UA -> mask geometry recomputed after metadata + resize; Chrome UA -> none', async ({ browser }) => {
+  // Safari
+  {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 375, height: 667 });
+    await page.setUserAgent(SAFARI_UA);
+    await page.goto(`http://localhost:${PORT}/index.html`, { waitUntil: 'domcontentloaded' });
+    // Give the base player a real src and wait for metadata (simulates late load)
+    await page.evaluate(() => {
+      const el = document.getElementById('idle-base-player');
+      el.src = 'Media/Processed/idle/base.webm';
+      el.load();
+    });
+    await page.waitForFunction(() => {
+      const el = document.getElementById('idle-base-player');
+      return el.readyState >= 1 && el.videoWidth > 0;
+    }, { timeout: 15000 });
+    await new Promise((r) => setTimeout(r, 150));
+    const g1 = await page.evaluate((f) => eval('(' + f + ')')(document.getElementById('idle-base-player')), maskGeom.toString());
+    const e1 = await page.evaluate((f, g) => eval('(' + f + ')')(g), expectedGeom.toString(), g1);
+    if (Math.abs(parseFloat(g1.size) - e1.w) > 2 || Math.abs(g1.size.split(' ').map(parseFloat)[1] - e1.h) > 2) {
+      throw new Error(`after metadata: mask-size ${g1.size} != content rect ${e1.w}x${e1.h}`);
+    }
+    if (Math.abs(parseFloat(g1.pos) - e1.left) > 2) {
+      throw new Error(`after metadata: mask-position ${g1.pos} != ${e1.left}px`);
+    }
+    // Resize -> geometry must update (self-healing)
+    await page.setViewport({ width: 500, height: 400 });
+    await new Promise((r) => setTimeout(r, 250));
+    const g2 = await page.evaluate((f) => eval('(' + f + ')')(document.getElementById('idle-base-player')), maskGeom.toString());
+    const e2 = await page.evaluate((f, g) => eval('(' + f + ')')(g), expectedGeom.toString(), g2);
+    if (Math.abs(parseFloat(g2.size) - e2.w) > 2 || Math.abs(g2.size.split(' ').map(parseFloat)[1] - e2.h) > 2) {
+      throw new Error(`after resize: mask-size ${g2.size} != content rect ${e2.w}x${e2.h} (stale geometry)`);
+    }
+    await page.close();
+  }
+  // Chrome: still no mask
+  {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 375, height: 667 });
+    await page.goto(`http://localhost:${PORT}/index.html`, { waitUntil: 'domcontentloaded' });
+    await new Promise((r) => setTimeout(r, 300));
+    const mask = await page.evaluate((f) => eval('(' + f + ')')(document.getElementById('idle-base-player')).img, maskGeom.toString());
+    if (mask && mask !== 'none') throw new Error(`Chrome UA unexpectedly has mask: ${mask}`);
+    await page.close();
+  }
+});
+
+test('fix6b: Safari UA -> animation-player masked during idle clip, cleared on pathway zoom; Chrome UA -> never masked', async ({ page }) => {
+  await reachIdle(page, { safari: true });
+  await page.evaluate(() => {
+    const ap = document.getElementById('animation-player');
+    ap.play = function () { return Promise.resolve(); };
+    loadNextIdleClip();
+  });
+  await page.waitForFunction(() => document.getElementById('animation-player').style.opacity === '1', { timeout: 10000 });
+  await new Promise((r) => setTimeout(r, 250));
+  const during = await page.evaluate((f) => eval('(' + f + ')')(document.getElementById('animation-player')), maskGeom.toString());
+  if (!during.img || during.img === 'none' || !during.img.includes('Media/Sources/idle/mask.png')) {
+    throw new Error(`Safari: animation-player missing idleBase mask during idle clip (${during.img})`);
+  }
+  // end the idle clip -> back to IDLE, then start a pathway zoom (clears mask)
+  await page.evaluate(() => document.getElementById('animation-player').dispatchEvent(new Event('ended')));
+  await page.waitForFunction(() => {
+    const hs = document.getElementById('tv-hotspot');
+    return hs && getComputedStyle(hs).display !== 'none';
+  }, { timeout: 10000 });
+  await page.evaluate(() => document.getElementById('tv-hotspot').click());
+  await page.waitForFunction(() => document.getElementById('animation-player').style.opacity === '1', { timeout: 10000 });
+  const zoom = await page.evaluate((f) => eval('(' + f + ')')(document.getElementById('animation-player')).img, maskGeom.toString());
+  if (zoom && zoom !== 'none' && zoom.includes('Sources/idle/mask.png') && !zoom.includes('tv/mask.png')) {
+    throw new Error(`Safari: idleBase mask still on animation-player during TV zoom (${zoom})`);
+  }
+  // zoom ends -> terminal state (tv menu); mask is tv/mask.png (covered by fix4b)
+  await page.evaluate(() => document.getElementById('animation-player').dispatchEvent(new Event('ended')));
+  await page.waitForFunction(() => {
+    const menu = document.getElementById('tv-vhs-menu');
+    return menu && !menu.hidden;
+  }, { timeout: 10000 });
+  // Go Back -> returnToIdle hides animation-player -> mask must be cleared
+  await page.evaluate(() => document.getElementById('back-button').click());
+  await page.evaluate(() => {
+    const eo = document.getElementById('eye-overlay');
+    const t = document.createElement('div');
+    t.className = 'eyelid eyelid-top';
+    const ev = new Event('animationend');
+    Object.defineProperty(ev, 'target', { value: t });
+    eo.dispatchEvent(ev);
+  });
+  await page.waitForFunction(() => {
+    const hs = document.getElementById('tv-hotspot');
+    return hs && getComputedStyle(hs).display !== 'none';
+  }, { timeout: 10000 });
+  const afterIdle = await page.evaluate((f) => eval('(' + f + ')')(document.getElementById('animation-player')).img, maskGeom.toString());
+  if (afterIdle && afterIdle !== 'none') throw new Error(`Safari: animation-player mask not cleared after returnToIdle (${afterIdle})`);
+
+  // Chrome UA: never masked
+  const page2 = await page.browser().newPage();
+  await reachIdle(page2, { safari: false });
+  await page2.evaluate(() => {
+    const ap = document.getElementById('animation-player');
+    ap.play = function () { return Promise.resolve(); };
+    loadNextIdleClip();
+  });
+  await page2.waitForFunction(() => document.getElementById('animation-player').style.opacity === '1', { timeout: 10000 });
+  await new Promise((r) => setTimeout(r, 250));
+  const chromeMask = await page2.evaluate((f) => eval('(' + f + ')')(document.getElementById('animation-player')).img, maskGeom.toString());
+  if (chromeMask && chromeMask !== 'none') throw new Error(`Chrome: animation-player unexpectedly masked (${chromeMask})`);
+  await page2.close();
 });
 
 // --- harness ---

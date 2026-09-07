@@ -549,6 +549,11 @@ function loadNextIdleClip() {
     animationPlayer.loop = false;
     animationPlayer.src = activeIdleClip.src;
     animationPlayer.load();
+    // Idle clips are alpha WebMs too — on Safari their black background would
+    // cover the screens behind the character mid-clip. Apply the root mask.
+    if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
+        window.IOSMasking.applyContentMask(animationPlayer, window.IOSMasking.MASK_SOURCES.idleBase);
+    }
 }
 
 function playLoadedIdleClip() {
@@ -631,6 +636,7 @@ function returnToIdle() {
     animationPlayer.pause();
     animationPlayer.removeAttribute('src');
     animationPlayer.load();
+    if (window.IOSMasking) window.IOSMasking.clearContentMask(animationPlayer);
 
     idleBasePlayer.style.opacity = '1';
     resumeBaseAfterOverlay();
