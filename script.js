@@ -163,6 +163,7 @@ let activePathwayName = null;
 let cabinetIdleLayersSuppressed = false;
 let zoomIdleLayersSuppressed = false;
 let wakeStarted = false;
+let portalHoldActive = false;
 
 /* =========================================================================
  *  Sound Engine
@@ -629,6 +630,7 @@ function returnToIdle() {
     currentState = State.IDLE;
     activeIdleClip = null;
     activePathwayName = null;
+    portalHoldActive = false;
     cabinetIdleLayersSuppressed = false;
     zoomIdleLayersSuppressed = false;
 
@@ -949,6 +951,10 @@ animationPlayer.addEventListener('canplay', () => {
     }
 
     if (currentState === State.PATHWAY) {
+        // PORTAL HOLD guard: after 'ended' we seek back and pause to hold the
+        // terminal frame. That seek fires 'canplay' — do NOT auto-play again,
+        // or the held zoom loops forever. The state moves to a hold state.
+        if (portalHoldActive) return;
         animationPlayer.play().catch((error) => {
             log(`Pathway play error: ${error.message}`);
             returnToIdle();
@@ -972,25 +978,34 @@ animationPlayer.addEventListener('ended', () => {
     if (currentState === State.PATHWAY) {
         log('Pathway clip ended');
         // PORTAL HOLD: the zoom clip is the camera state inside the terminal —
-        // hold its final frame instead of freezing on whatever iOS/loop wants.
-        // Rewind to the last frame explicitly so Safari's frame reaper can't
-        // blank a paused-CA decoder, then pause.
-        if (Number.isFinite(animationPlayer.duration) && animationPlayer.duration > 0) {
-            animationPlayer.currentTime = Math.max(0, animationPlayer.duration - 1 / 60);
+        // hold its final frame. On a NATURAL end the playhead is already on
+        // the last frame; never seek then (a seek past the buffered range
+        // silently lands at 0 and snaps the user back to the storefront).
+        // Only a synthetic/early 'ended' (currentTime well short of the end)
+        // needs a seek, clamped to the seekable range.
+        if (Number.isFinite(animationPlayer.duration) && animationPlayer.duration > 0
+            && animationPlayer.currentTime < animationPlayer.duration - 0.5
+            && animationPlayer.seekable.length > 0) {
+            const target = Math.min(
+                animationPlayer.duration - 1 / 60,
+                animationPlayer.seekable.end(animationPlayer.seekable.length - 1) - 1 / 60
+            );
+            if (target > animationPlayer.currentTime) {
+                portalHoldActive = true;
+                animationPlayer.currentTime = target;
+            }
         }
         animationPlayer.pause();
+        // Plan C: no terminal masks. Behind the held frame is the static shop
+        // JPG (no screens run on Safari), and the zoom clip's final frame IS
+        // the terminal pose — masking it would cut holes over nothing (and
+        // the TV mask PNG never existed: 404 -> Safari hides the element).
         if (activePathwayName === 'gameZooms') {
             suppressCabinetIdleLayers();
-            if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
-                window.IOSMasking.applyContentMask(animationPlayer, window.IOSMasking.MASK_SOURCES.cabinetZoom);
-            }
         }
         if (activePathwayName === 'gameZooms') showCabinetArcadeMenu();
         if (activePathwayName === 'tvZooms') {
             suppressTvIdleLayers();
-            if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
-                window.IOSMasking.applyContentMask(animationPlayer, window.IOSMasking.MASK_SOURCES.tvZoom);
-            }
         }
         if (activePathwayName === 'tvZooms') showTvVhsMenu();
     }

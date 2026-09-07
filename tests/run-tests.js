@@ -183,16 +183,39 @@ test('fix4b: pathway mask absent during zoom, applied on ended', async ({ page }
     return cs.webkitMaskImage || cs.maskImage;
   });
   if (during && during !== 'none') throw new Error(`mask present during zoom: ${during}`);
+  // Wait until the zoom clip is actually seekable before firing synthetic ended
+  await page.waitForFunction(() => {
+    const ap = document.getElementById('animation-player');
+    return ap.readyState >= 2 && Number.isFinite(ap.duration) && ap.duration > 0;
+  }, { timeout: 15000 });
   // Fire ended manually to avoid waiting out the whole clip
   await page.evaluate(() => {
     const ap = document.getElementById('animation-player');
     ap.dispatchEvent(new Event('ended'));
   });
+  // Plan C: NO terminal mask on ended — the held final frame is the terminal
+  // pose; masking would cut holes over the static shop (nothing behind).
   const after = await page.evaluate(() => {
     const cs = getComputedStyle(document.getElementById('animation-player'));
     return cs.webkitMaskImage || cs.maskImage;
   });
-  if (!after || after === 'none' || !after.includes('Masks/idle-tv.png')) throw new Error(`mask not applied on ended: "${after}"`);
+  if (after && after !== 'none') throw new Error(`terminal mask still applied on ended: "${after}"`);
+  // Portal hold: on a natural/synthetic end, playhead must be parked at the
+  // held final frame (or seekable end) and paused — never snapped to 0.
+  await page.waitForFunction(() => {
+    const ap = document.getElementById('animation-player');
+    if (!ap.paused) return false;
+    if (!Number.isFinite(ap.duration) || ap.duration <= 0) return false;
+    if (ap.currentTime === 0) return false;
+    return ap.currentTime >= ap.duration - 0.6
+      || (ap.seekable.length > 0 && ap.currentTime >= ap.seekable.end(ap.seekable.length - 1) - 0.1);
+  }, { timeout: 5000 }).catch(async () => {
+    const hold = await page.evaluate(() => {
+      const ap = document.getElementById('animation-player');
+      return { paused: ap.paused, t: ap.currentTime, d: ap.duration };
+    });
+    throw new Error(`portal hold not reached: paused=${hold.paused} t=${hold.t} d=${hold.d}`);
+  });
 });
 
 // --- Fix 6: self-healing mask geometry (recompute on metadata/resize) ---
