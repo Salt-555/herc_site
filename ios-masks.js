@@ -130,9 +130,11 @@
         applyContentMask,
         clearContentMask,
         MASK_SOURCES: {
-            idleBase: 'Media/Sources/idle/mask.png',
-            tvZoom: 'Media/Sources/idle/tv/mask.png',
-            cabinetZoom: 'Media/Sources/idle/cabinet/mask.png',
+            // Media/Masks/ is the committed, deployable copy of the gitignored
+            // Media/Sources/ masks (Sources never reaches Cloudflare).
+            idleBase: 'Media/Masks/idle.png',
+            tvZoom: 'Media/Masks/idle-tv.png',
+            cabinetZoom: 'Media/Masks/idle-cabinet.png',
         },
     };
 })();

@@ -159,7 +159,7 @@ test('fix4a: Safari UA -> idle-base-player gets mask-image, Chrome UA -> none', 
       return { v: cs.webkitMaskImage || cs.maskImage, size: cs.webkitMaskSize || cs.maskSize, box };
     });
     if (!mask.v || mask.v === 'none') throw new Error('Safari UA: idle-base-player has no mask-image');
-    if (!mask.v.includes('Media/Sources/idle/mask.png')) throw new Error(`unexpected mask url: ${mask.v}`);
+    if (!mask.v.includes('Media/Masks/idle.png')) throw new Error(`unexpected mask url: ${mask.v}`);
     // Content-rect geometry: square media in a square-ish box -> mask matches the letterboxed content rect.
     const dim = mask.size.split(' ').map(parseFloat);
     const expected = Math.min(mask.box.width, mask.box.height);
@@ -196,7 +196,7 @@ test('fix4b: pathway mask absent during zoom, applied on ended', async ({ page }
     const cs = getComputedStyle(document.getElementById('animation-player'));
     return cs.webkitMaskImage || cs.maskImage;
   });
-  if (!after || after === 'none' || !after.includes('idle/tv/mask.png')) throw new Error(`mask not applied on ended: "${after}"`);
+  if (!after || after === 'none' || !after.includes('Masks/idle-tv.png')) throw new Error(`mask not applied on ended: "${after}"`);
 });
 
 // --- Fix 6: self-healing mask geometry (recompute on metadata/resize) ---
@@ -259,7 +259,7 @@ test('fix6b: Safari UA -> animation-player masked during idle clip, cleared on p
   await page.waitForFunction(() => document.getElementById('animation-player').style.opacity === '1', { timeout: 10000 });
   await new Promise((r) => setTimeout(r, 250));
   const during = await page.evaluate((f) => eval('(' + f + ')')(document.getElementById('animation-player')), maskGeom.toString());
-  if (!during.img || during.img === 'none' || !during.img.includes('Media/Sources/idle/mask.png')) {
+  if (!during.img || during.img === 'none' || !during.img.includes('Media/Masks/idle.png')) {
     throw new Error(`Safari: animation-player missing idleBase mask during idle clip (${during.img})`);
   }
   // end the idle clip -> back to IDLE, then start a pathway zoom (clears mask)
@@ -271,7 +271,7 @@ test('fix6b: Safari UA -> animation-player masked during idle clip, cleared on p
   await page.evaluate(() => document.getElementById('tv-hotspot').click());
   await page.waitForFunction(() => document.getElementById('animation-player').style.opacity === '1', { timeout: 10000 });
   const zoom = await page.evaluate((f) => eval('(' + f + ')')(document.getElementById('animation-player')).img, maskGeom.toString());
-  if (zoom && zoom !== 'none' && zoom.includes('Sources/idle/mask.png') && !zoom.includes('tv/mask.png')) {
+  if (zoom && zoom !== 'none' && zoom.includes('Masks/idle.png') && !zoom.includes('idle-tv')) {
     throw new Error(`Safari: idleBase mask still on animation-player during TV zoom (${zoom})`);
   }
   // zoom ends -> terminal state (tv menu); mask is tv/mask.png (covered by fix4b)
