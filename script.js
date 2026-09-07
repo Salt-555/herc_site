@@ -650,6 +650,12 @@ function returnToIdle() {
 }
 
 function startBaseIdleLoop() {
+    // Plan C (mobile): the base video never runs on Safari — the JPG stays.
+    if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
+        idleBasePlayer.style.opacity = '0';
+        idleImage.style.opacity = '1';
+        return;
+    }
     idleBasePlayer.style.opacity = '1';
 
     playVideo(idleBasePlayer, CONFIG.baseClip, { loop: true })
@@ -776,6 +782,8 @@ function hideTvVhsMenu() {
 }
 
 function resumeBackgroundScreens() {
+    // Plan C (mobile): screens stay off on Safari — occluded by the static JPG.
+    if (window.IOSMasking && window.IOSMasking.isSafariLike()) return;
     SCREENS.forEach((screen) => {
         if (!screen.channels.length) {
             screen.element.style.opacity = '0';
@@ -963,6 +971,13 @@ animationPlayer.addEventListener('ended', () => {
 
     if (currentState === State.PATHWAY) {
         log('Pathway clip ended');
+        // PORTAL HOLD: the zoom clip is the camera state inside the terminal —
+        // hold its final frame instead of freezing on whatever iOS/loop wants.
+        // Rewind to the last frame explicitly so Safari's frame reaper can't
+        // blank a paused-CA decoder, then pause.
+        if (Number.isFinite(animationPlayer.duration) && animationPlayer.duration > 0) {
+            animationPlayer.currentTime = Math.max(0, animationPlayer.duration - 1 / 60);
+        }
         animationPlayer.pause();
         if (activePathwayName === 'gameZooms') {
             suppressCabinetIdleLayers();
@@ -1020,13 +1035,25 @@ idleImage.addEventListener('load', () => {
 
 // iOS Safari: apply the root idle mask to the looping idle base video.
 // (Chrome decodes the baked VP9 alpha natively; double-masking is unneeded.)
+// Plan C (mobile): Safari ALSO skips the base video entirely — the static JPG
+// stands in as the shop, screens stay visible through CSS-mask cutouts, and
+// only ONE large video decoder ever runs (idle clips in animationPlayer).
+// This kills the decoder-budget blackouts without HEVC.
 if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
-    window.IOSMasking.applyContentMask(idleBasePlayer, window.IOSMasking.MASK_SOURCES.idleBase);
+    idleBasePlayer.style.opacity = '0';
+    idleBasePlayer.pause();
+    idleBasePlayer.removeAttribute('src');
+    idleBasePlayer.load();
+    idleImage.style.opacity = '1';   // JPG is the persistent shop on iOS
 }
 window.addEventListener('load', () => {
     hideBackButton();
     updateLayout();
-    SCREENS.forEach((screen) => playRandomChannel(screen));
+    // Plan C (mobile): screens are occluded by the static JPG shop on Safari —
+    // never start them there (decoder budget).
+    if (!(window.IOSMasking && window.IOSMasking.isSafariLike())) {
+        SCREENS.forEach((screen) => playRandomChannel(screen));
+    }
     prepareWakeSequence();
 });
 

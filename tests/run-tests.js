@@ -130,7 +130,7 @@ test('fix3: .hotspot and .back-button have touch-action manipulation', async ({ 
 });
 
 // --- Fix 4: Safari-only CSS mask on character videos ---
-test('fix4a: Safari UA -> idle-base-player gets mask-image, Chrome UA -> none', async ({ browser, blockers }) => {
+test('fix4a: Plan C Safari UA -> base video disabled, JPG stands in; Chrome UA -> no mask', async ({ browser, blockers }) => {
   // Chrome UA: no mask
   {
     const page = await browser.newPage();
@@ -145,27 +145,23 @@ test('fix4a: Safari UA -> idle-base-player gets mask-image, Chrome UA -> none', 
     if (mask && mask !== 'none') throw new Error(`Chrome UA unexpectedly has mask: ${mask}`);
     await page.close();
   }
-  // Safari UA: mask present on idle base
+  // Safari UA (Plan C): base video disabled, JPG is the persistent shop
   {
     const page = await browser.newPage();
     await page.setViewport(VIEWPORT);
     await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1');
     await page.goto(`http://localhost:${PORT}/index.html`, { waitUntil: 'domcontentloaded' });
     await new Promise((r) => setTimeout(r, 300));
-    const mask = await page.evaluate(() => {
-      const el = document.getElementById('idle-base-player');
-      const box = el.getBoundingClientRect();
-      const cs = getComputedStyle(el);
-      return { v: cs.webkitMaskImage || cs.maskImage, size: cs.webkitMaskSize || cs.maskSize, box };
-    });
-    if (!mask.v || mask.v === 'none') throw new Error('Safari UA: idle-base-player has no mask-image');
-    if (!mask.v.includes('Media/Masks/idle.png')) throw new Error(`unexpected mask url: ${mask.v}`);
-    // Content-rect geometry: square media in a square-ish box -> mask matches the letterboxed content rect.
-    const dim = mask.size.split(' ').map(parseFloat);
-    const expected = Math.min(mask.box.width, mask.box.height);
-    if (Math.abs(dim[0] - expected) > 2 || Math.abs(dim[1] - expected) > 2) {
-      throw new Error(`mask-size ${mask.size} != content rect ${expected}px`);
-    }
+    const state = await page.evaluate(() => ({
+      baseSrc: document.getElementById('idle-base-player').getAttribute('src'),
+      baseOpacity: document.getElementById('idle-base-player').style.opacity,
+      imgOpacity: document.getElementById('idle-image').style.opacity,
+      screensOff: Array.from(document.querySelectorAll('.tv-video, .game-cabinet-video')).every((el) => el.style.opacity !== '1'),
+    }));
+    if (state.baseSrc) throw new Error(`Safari: base video should have no src (Plan C), got ${state.baseSrc}`);
+    if (state.baseOpacity !== '0') throw new Error(`Safari: base opacity ${state.baseOpacity}, expected 0`);
+    if (state.imgOpacity !== '1') throw new Error(`Safari: idle JPG opacity ${state.imgOpacity}, expected 1`);
+    if (!state.screensOff) throw new Error('Safari: screen videos should not be started (Plan C)');
     await page.close();
   }
 });
