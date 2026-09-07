@@ -126,6 +126,10 @@
 
     window.IOSMasking = {
         isSafariLike,
+        // Plan B: when the HEVC-with-alpha path is active, native alpha makes
+        // CSS masks redundant — masking must no-op entirely (a mask over an
+        // HEVC-alpha video would cut holes in already-transparent pixels).
+        shouldMask: () => !window.USE_HEVC,
         contentRectFraction,
         applyContentMask,
         clearContentMask,
