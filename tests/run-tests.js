@@ -241,3 +241,102 @@ async function main() {
   process.exit(fail ? 1 : 0);
 }
 main();
+
+// --- Fix 5: Safari-only decode throttling (iOS WebKit decoder budget) ---
+const SAFARI_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+
+async function reachIdle(page, { safari }) {
+  await page.setViewport(VIEWPORT);
+  if (safari) await page.setUserAgent(SAFARI_UA);
+  await page.goto(`http://localhost:${PORT}/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => document.body.click());
+  await page.waitForFunction(() => {
+    const hs = document.getElementById('tv-hotspot');
+    return hs && getComputedStyle(hs).display !== 'none';
+  }, { timeout: 30000 });
+}
+
+test('fix5a: Safari UA -> preloader no-op; Chrome UA -> preloadVideo.src set', async ({ page }) => {
+  await reachIdle(page, { safari: true });
+  await page.evaluate(() => scheduleNextIdleClip());
+  await new Promise((r) => setTimeout(r, 150));
+  const safariInfo = await page.evaluate(() => window.__hercPreloadDebug());
+  if (safariInfo.src) throw new Error(`Safari: preload src set to ${safariInfo.src}`);
+
+  const page2 = await page.browser().newPage();
+  await reachIdle(page2, { safari: false });
+  await page2.evaluate(() => scheduleNextIdleClip());
+  await new Promise((r) => setTimeout(r, 150));
+  const chromeInfo = await page2.evaluate(() => window.__hercPreloadDebug());
+  if (!chromeInfo.src || !String(chromeInfo.src).includes('idle/')) {
+    throw new Error(`Chrome: preload src not set (${chromeInfo.src})`);
+  }
+});
+
+test('fix5b: Safari UA -> base paused during idle clip, resumed after returnToIdle; Chrome UA -> base not paused', async ({ page }) => {
+  await reachIdle(page, { safari: true });
+  await page.evaluate(() => {
+    const ap = document.getElementById('animation-player');
+    ap.play = function () { return Promise.resolve(); };
+    loadNextIdleClip();
+  });
+  await page.waitForFunction(() => document.getElementById('animation-player').style.opacity === '1', { timeout: 10000 });
+  await new Promise((r) => setTimeout(r, 250));
+  const during = await page.evaluate(() => document.getElementById('idle-base-player').paused);
+  if (during !== true) throw new Error('Safari: idleBasePlayer not paused during idle clip');
+  await page.evaluate(() => document.getElementById('animation-player').dispatchEvent(new Event('ended')));
+  await page.waitForFunction(() => {
+    const hs = document.getElementById('tv-hotspot');
+    return hs && getComputedStyle(hs).display !== 'none';
+  }, { timeout: 10000 });
+  const after = await page.evaluate(() => document.getElementById('idle-base-player').paused);
+  if (after !== false) throw new Error('Safari: idleBasePlayer still paused after returnToIdle');
+
+  const page2 = await page.browser().newPage();
+  await reachIdle(page2, { safari: false });
+  await page2.evaluate(() => {
+    const ap = document.getElementById('animation-player');
+    ap.play = function () { return Promise.resolve(); };
+    loadNextIdleClip();
+  });
+  await page2.waitForFunction(() => document.getElementById('animation-player').style.opacity === '1', { timeout: 10000 });
+  await new Promise((r) => setTimeout(r, 250));
+  const chromePaused = await page2.evaluate(() => document.getElementById('idle-base-player').paused);
+  if (chromePaused !== false) throw new Error('Chrome: idleBasePlayer unexpectedly paused');
+});
+
+test('fix5c: Safari UA -> base paused during TV pathway, stays paused at terminal, resumes after Go Back', async ({ page }) => {
+  await reachIdle(page, { safari: true });
+  await page.evaluate(() => {
+    const ap = document.getElementById('animation-player');
+    ap.play = function () { return Promise.resolve(); };
+  });
+  await page.evaluate(() => document.getElementById('tv-hotspot').click());
+  await page.waitForFunction(() => document.getElementById('animation-player').style.opacity === '1', { timeout: 10000 });
+  await new Promise((r) => setTimeout(r, 250));
+  const during = await page.evaluate(() => document.getElementById('idle-base-player').paused);
+  if (during !== true) throw new Error('Safari: base not paused during pathway');
+  await page.evaluate(() => document.getElementById('animation-player').dispatchEvent(new Event('ended')));
+  await new Promise((r) => setTimeout(r, 250));
+  const terminal = await page.evaluate(() => ({
+    paused: document.getElementById('idle-base-player').paused,
+    opacity: document.getElementById('idle-base-player').style.opacity,
+  }));
+  if (terminal.paused !== true) throw new Error('Safari: base resumed at terminal (must stay paused)');
+  if (terminal.opacity !== '0') throw new Error(`Safari: base opacity at terminal is ${terminal.opacity}, expected 0`);
+  await page.evaluate(() => document.getElementById('back-button').click());
+  await page.evaluate(() => {
+    const eo = document.getElementById('eye-overlay');
+    const t = document.createElement('div');
+    t.className = 'eyelid eyelid-top';
+    const ev = new Event('animationend');
+    Object.defineProperty(ev, 'target', { value: t });
+    eo.dispatchEvent(ev);
+  });
+  await page.waitForFunction(() => {
+    const hs = document.getElementById('tv-hotspot');
+    return hs && getComputedStyle(hs).display !== 'none';
+  }, { timeout: 10000 });
+  const after = await page.evaluate(() => document.getElementById('idle-base-player').paused);
+  if (after !== false) throw new Error('Safari: base not resumed after Go Back returnToIdle');
+});

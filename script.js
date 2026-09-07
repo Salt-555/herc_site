@@ -458,6 +458,29 @@ function playVideo(video, src, { loop = false } = {}) {
 }
 
 /* =========================================================================
+ *  Safari decode throttling (iOS WebKit decoder budget)
+ *  iOS Safari decodes VP9 in software with a hard decoder budget; running
+ *  the large idle-base loop concurrently with a big animationPlayer clip
+ *  makes WebKit drop the base decoder (permanent black screen). Pause the
+ *  base whenever a clip plays in animationPlayer, and skip the detached
+ *  preloader entirely on Safari-like browsers. Chrome behavior unchanged.
+ * ======================================================================= */
+
+function pauseBaseForOverlay() {
+    if (window.IOSMasking && window.IOSMasking.isSafariLike() && !idleBasePlayer.paused) {
+        idleBasePlayer.pause();
+    }
+}
+
+function resumeBaseAfterOverlay() {
+    if (!window.IOSMasking || !window.IOSMasking.isSafariLike()) return;
+    // During pathway terminals the suppression logic hides the base
+    // (opacity 0); never resume a hidden base.
+    if (idleBasePlayer.style.opacity !== '1') return;
+    idleBasePlayer.play().catch(() => {});
+}
+
+/* =========================================================================
  *  Idle clip preloading
  *  During idle state, we preload the next random clip into a detached
  *  <video> element so it's ready instantly when the timer fires.
@@ -468,6 +491,13 @@ preloadVideo.muted = true;
 preloadVideo.preload = 'auto';
 
 function preloadNextIdleClip() {
+    // Safari: a detached preloader adds a third concurrent decoder for
+    // zero benefit — loadNextIdleClip() picks directly when nothing is
+    // preloaded.
+    if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
+        if (window.__hercPreloadDebug) window.__hercPreloadDebug.safariNoop = true;
+        return;
+    }
     const index = getRandomIndex(CONFIG.idleClips, lastIdleClipIndex);
     if (index === -1) return;
 
@@ -527,6 +557,7 @@ function playLoadedIdleClip() {
     currentState = State.PLAYING_IDLE_CLIP;
     log(`Playing idle clip: ${activeIdleClip.id}`);
     animationPlayer.style.opacity = '1';
+    pauseBaseForOverlay();
 
     animationPlayer.play().catch((error) => {
         log(`Idle clip play error: ${error.message}`);
@@ -563,6 +594,7 @@ function startWakeSequence() {
     animationPlayer.currentTime = 0;
     animationPlayer.style.opacity = '1';
     startBaseIdleLoop();
+    pauseBaseForOverlay();
 
     animationPlayer.play().catch((error) => {
         log(`Wake clip play error: ${error.message}`);
@@ -580,6 +612,7 @@ function finishWakeSequence() {
     animationPlayer.load();
 
     idleBasePlayer.style.opacity = '1';
+    resumeBaseAfterOverlay();
     hideBackButton();
     showHotspots();
     scheduleNextIdleClip();
@@ -600,6 +633,7 @@ function returnToIdle() {
     animationPlayer.load();
 
     idleBasePlayer.style.opacity = '1';
+    resumeBaseAfterOverlay();
     hideCabinetArcade();
     hideTvVhsMenu();
     resumeBackgroundScreens();
@@ -646,6 +680,7 @@ function playPathwayClip(videoSrc, pathwayName) {
     animationPlayer.loop = false;
     animationPlayer.src = videoSrc;
     animationPlayer.load();
+    pauseBaseForOverlay();
 
     // The zoom clip must be unmasked while playing; the terminal-frame cutout
     // mask is only applied when the clip ends (see the 'ended' listener).
@@ -992,3 +1027,8 @@ window.addEventListener('load', () => {
 characterDisplay.addEventListener('transitionend', updateLayout);
 
 log('Initializing animation controller');
+
+// Debug hook for tests: inspect the detached preloader's src.
+window.__hercPreloadDebug = function () {
+    return { src: preloadVideo.currentSrc || preloadVideo.src || '' };
+};
