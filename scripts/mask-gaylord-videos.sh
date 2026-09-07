@@ -24,6 +24,10 @@ SOURCE_DIR="$REPO_ROOT/Media/Sources"
 OUTPUT_DIR="$REPO_ROOT/Media/Processed"
 IDLE_SCENE="idle"    # the root idle scene — the only one this script masks
 CRF=${CRF:-28}
+# LAST_FRAME=1: apply the mask ONLY to the final frame of each clip; all other
+# frames pass through unmasked. For zoom clips whose cutout is only correct at
+# the terminal pose (e.g. idle/cabinet — the hole must not persist mid-zoom).
+LAST_FRAME=${LAST_FRAME:-0}
 FORCE=${FORCE:-0}
 LIMIT=${LIMIT:-0}
 DRY_RUN=0
@@ -88,12 +92,16 @@ for input in "${videos[@]}"; do
     scene_dir=$(dirname -- "$input")
     output="$OUTPUT_DIR/$scene_dir_rel/$base.webm"
 
-    # Only mask the root idle scene. Zoom/terminal scenes have custom
-    # cutout timing and are intentionally left untouched.
-    if [ "$scene_dir_rel" != "$IDLE_SCENE" ]; then
+    # Only mask the root idle scene by default. Zoom/terminal scenes have
+    # custom cutout timing; with LAST_FRAME=1 they are masked too, since
+    # last-frame-only masking is exactly the treatment they need.
+    if [ "$scene_dir_rel" != "$IDLE_SCENE" ] && [ "$LAST_FRAME" != "1" ]; then
         printf '[SKIP] %s — custom scene (%s), not masked by this pipeline\n' "$rel" "$scene_dir_rel" >&2
         skipped_custom=$((skipped_custom + 1))
         continue
+    fi
+    if [ "$scene_dir_rel" != "$IDLE_SCENE" ] && [ "$LAST_FRAME" = "1" ]; then
+        printf '[LAST-FRAME] %s — custom scene, masking final frame only\n' "$rel" >&2
     fi
 
     mask=$(resolve_mask "$scene_dir")
@@ -140,20 +148,38 @@ for input in "${videos[@]}"; do
     # Check if source has audio
     has_audio=$(ffprobe -v error -select_streams a -show_entries stream=codec_name -of csv=p=0 "$input" 2>/dev/null)
 
-    # Step 1: Extract RGBA PNG frames with mask alpha applied
+    # Step 1: Extract RGBA PNG frames with mask alpha applied.
+    # LAST_FRAME=1: mask only the final frame; earlier frames pass through.
     frame_dir="$TEMP_DIR/$base"
     mkdir -p "$frame_dir"
     mkdir -p "$(dirname -- "$output")"
 
     printf '  [1/2] Extracting masked RGBA frames...\n'
-    ffmpeg -y \
-        -i "$input" \
-        -loop 1 -t "$duration" -i "$mask" \
-        -filter_complex \
-            "[1:v]scale=${width}:${height}:flags=lanczos,format=rgba[mask];[0:v]format=rgba[vid];[vid][mask]blend=all_mode=and:all_opacity=1:all_expr='A*B/255',format=rgba[out]" \
-        -map "[out]" \
-        -t "$duration" \
-        "$frame_dir/frame_%05d.png"
+    if [ "$LAST_FRAME" = "1" ]; then
+        last_frame=$(ffprobe -v error -select_streams v:0 \
+            -count_frames -show_entries stream=nb_read_frames \
+            -of default=noprint_wrappers=1:nokey=1 "$input")
+        prev=$((last_frame - 1))
+        printf '        last-frame-only mode: masking frame %s of %s\n' \
+            "$last_frame" "$last_frame"
+        ffmpeg -y \
+            -i "$input" \
+            -loop 1 -i "$mask" \
+            -filter_complex \
+                "[1:v]scale=${width}:${height}:flags=lanczos,format=rgba[mask];[0:v]format=rgba,split=2[vm][vl];[vm]trim=end_frame=${prev},setpts=PTS-STARTPTS[main];[vl]select='eq(n\,${prev})',setpts=PTS-STARTPTS[lf];[lf][mask]blend=all_mode=and:all_opacity=1:all_expr='A*B/255',format=rgba[masked];[main][masked]concat=n=2:v=1:a=0[out]" \
+            -map "[out]" \
+            -t "$duration" \
+            "$frame_dir/frame_%05d.png"
+    else
+        ffmpeg -y \
+            -i "$input" \
+            -loop 1 -t "$duration" -i "$mask" \
+            -filter_complex \
+                "[1:v]scale=${width}:${height}:flags=lanczos,format=rgba[mask];[0:v]format=rgba[vid];[vid][mask]blend=all_mode=and:all_opacity=1:all_expr='A*B/255',format=rgba[out]" \
+            -map "[out]" \
+            -t "$duration" \
+            "$frame_dir/frame_%05d.png"
+    fi
 
     # Step 2: Encode RGBA PNGs to VP9 alpha WebM, with audio if available
     printf '  [2/2] Encoding VP9 alpha WebM...\n'

@@ -40,6 +40,7 @@ body {
     z-index: 150;
     cursor: pointer;
     pointer-events: all;
+    touch-action: manipulation;
 }
 
 .back-button {
@@ -56,6 +57,7 @@ body {
     text-transform: uppercase;
     cursor: pointer;
     pointer-events: all;
+    touch-action: manipulation;
     text-shadow: 0 0 6px rgba(255, 255, 210, 0.45);
 }
 

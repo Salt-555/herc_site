@@ -1,6 +1,6 @@
 // Scene-graph media: Media/Processed/<scene-path>/<role>.<ext>
 // MEDIA_VER busts browser/CDN cache when runtime media changes (increment it).
-const MEDIA_VER = 1;
+const MEDIA_VER = 2;
 const MEDIA = (scene, role = 'base', ext = 'webm') => `Media/Processed/${scene}/${role}.${ext}?v=${MEDIA_VER}`;
 
 /* =========================================================================
@@ -646,6 +646,19 @@ function playPathwayClip(videoSrc, pathwayName) {
     animationPlayer.loop = false;
     animationPlayer.src = videoSrc;
     animationPlayer.load();
+
+    // The zoom clip must be unmasked while playing; the terminal-frame cutout
+    // mask is only applied when the clip ends (see the 'ended' listener).
+    if (window.IOSMasking) {
+        window.IOSMasking.clearContentMask(animationPlayer);
+    }
+
+    // iOS Safari: user activation is not sticky across async boundaries, so the
+    // play() call must happen synchronously inside the click's call stack.
+    animationPlayer.play().catch((error) => {
+        log(`Pathway play error: ${error.message}`);
+        returnToIdle();
+    });
 }
 
 function enterCabinetArcadePathway() {
@@ -910,9 +923,19 @@ animationPlayer.addEventListener('ended', () => {
     if (currentState === State.PATHWAY) {
         log('Pathway clip ended');
         animationPlayer.pause();
-        if (activePathwayName === 'gameZooms') suppressCabinetIdleLayers();
+        if (activePathwayName === 'gameZooms') {
+            suppressCabinetIdleLayers();
+            if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
+                window.IOSMasking.applyContentMask(animationPlayer, window.IOSMasking.MASK_SOURCES.cabinetZoom);
+            }
+        }
         if (activePathwayName === 'gameZooms') showCabinetArcadeMenu();
-        if (activePathwayName === 'tvZooms') suppressTvIdleLayers();
+        if (activePathwayName === 'tvZooms') {
+            suppressTvIdleLayers();
+            if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
+                window.IOSMasking.applyContentMask(animationPlayer, window.IOSMasking.MASK_SOURCES.tvZoom);
+            }
+        }
         if (activePathwayName === 'tvZooms') showTvVhsMenu();
     }
 });
@@ -949,6 +972,16 @@ backButton.addEventListener('click', () => {
  * ======================================================================= */
 
 window.addEventListener('resize', updateLayout);
+
+idleImage.addEventListener('load', () => {
+    updateLayout();
+});
+
+// iOS Safari: apply the root idle mask to the looping idle base video.
+// (Chrome decodes the baked VP9 alpha natively; double-masking is unneeded.)
+if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
+    window.IOSMasking.applyContentMask(idleBasePlayer, window.IOSMasking.MASK_SOURCES.idleBase);
+}
 window.addEventListener('load', () => {
     hideBackButton();
     updateLayout();
