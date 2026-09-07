@@ -1,15 +1,7 @@
 // Scene-graph media: Media/Processed/<scene-path>/<role>.<ext>
 // MEDIA_VER busts browser/CDN cache when runtime media changes (increment it).
-const MEDIA_VER = 3;
-
-// HEVC-with-alpha path for Safari/iOS: Safari decodes HEVC (hvc1) in hardware
-// WITH alpha, but discards VP9 WebM alpha. isSafariLike() gates both the media
-// choice and the (now legacy) CSS-mask path. All character clips exist in both
-// formats (scripts/encode-hevc-alpha.sh); screens stay WebM (tiny, work fine).
-const USE_HEVC = window.IOSMasking && window.IOSMasking.isSafariLike()
-    && (document.createElement('video').canPlayType('video/mp4; codecs="hvc1"') !== '');
-const MEDIA_EXT = USE_HEVC ? 'mp4' : 'webm';
-const MEDIA = (scene, role = 'base', ext = MEDIA_EXT) => `Media/Processed/${scene}/${role}.${ext}?v=${MEDIA_VER}`;
+const MEDIA_VER = 2;
+const MEDIA = (scene, role = 'base', ext = 'webm') => `Media/Processed/${scene}/${role}.${ext}?v=${MEDIA_VER}`;
 
 /* =========================================================================
  *  Coordinate helper — converts from any source coordinate space to
@@ -559,7 +551,7 @@ function loadNextIdleClip() {
     animationPlayer.load();
     // Idle clips are alpha WebMs too — on Safari their black background would
     // cover the screens behind the character mid-clip. Apply the root mask.
-    if (window.IOSMasking && window.IOSMasking.isSafariLike() && window.IOSMasking.shouldMask()) {
+    if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
         window.IOSMasking.applyContentMask(animationPlayer, window.IOSMasking.MASK_SOURCES.idleBase);
     }
 }
@@ -974,14 +966,14 @@ animationPlayer.addEventListener('ended', () => {
         animationPlayer.pause();
         if (activePathwayName === 'gameZooms') {
             suppressCabinetIdleLayers();
-            if (window.IOSMasking && window.IOSMasking.isSafariLike() && window.IOSMasking.shouldMask()) {
+            if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
                 window.IOSMasking.applyContentMask(animationPlayer, window.IOSMasking.MASK_SOURCES.cabinetZoom);
             }
         }
         if (activePathwayName === 'gameZooms') showCabinetArcadeMenu();
         if (activePathwayName === 'tvZooms') {
             suppressTvIdleLayers();
-            if (window.IOSMasking && window.IOSMasking.isSafariLike() && window.IOSMasking.shouldMask()) {
+            if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
                 window.IOSMasking.applyContentMask(animationPlayer, window.IOSMasking.MASK_SOURCES.tvZoom);
             }
         }
@@ -1028,7 +1020,7 @@ idleImage.addEventListener('load', () => {
 
 // iOS Safari: apply the root idle mask to the looping idle base video.
 // (Chrome decodes the baked VP9 alpha natively; double-masking is unneeded.)
-if (window.IOSMasking && window.IOSMasking.isSafariLike() && window.IOSMasking.shouldMask()) {
+if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
     window.IOSMasking.applyContentMask(idleBasePlayer, window.IOSMasking.MASK_SOURCES.idleBase);
 }
 window.addEventListener('load', () => {
