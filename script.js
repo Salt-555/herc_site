@@ -482,6 +482,44 @@ function getRandomIndex(items, lastIndex = -1) {
     return index;
 }
 
+/* =========================================================================
+ *  Idle deck (no-repeat-until-all-played)
+ *  Fisher-Yates shuffle of clip indices; draw() pops cards until empty,
+ *  then reshuffles. At each epoch boundary the new deck's first card is
+ *  swapped away from the last-played clip so it can't repeat back-to-back.
+ * ======================================================================= */
+
+function shuffledDeckIndices(n, avoidFirst) {
+    const indices = Array.from({ length: n }, (_, i) => i);
+    for (let i = n - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    // draw() pops from the end, so the first card of the new epoch is the
+    // last element — swap it away from the last-played clip.
+    if (n > 1 && indices[n - 1] === avoidFirst) {
+        const swap = Math.floor(Math.random() * (n - 1));
+        [indices[n - 1], indices[swap]] = [indices[swap], indices[n - 1]];
+    }
+    return indices;
+}
+
+function createIdleDeck(n) {
+    if (!Number.isInteger(n) || n <= 0) return { draw: () => -1, remaining: () => 0 };
+    let cards = shuffledDeckIndices(n);
+    return {
+        draw() {
+            if (!cards.length) cards = shuffledDeckIndices(n, lastIdleClipIndex);
+            return cards.pop();
+        },
+        remaining() {
+            return cards.length;
+        },
+    };
+}
+
+const idleDeck = createIdleDeck(CONFIG.idleClips.length);
+
 function playVideo(video, src, { loop = false } = {}) {
     video.loop = loop;
     if (video.getAttribute('src') !== src) {
@@ -532,7 +570,7 @@ function preloadNextIdleClip() {
         if (window.__hercPreloadDebug) window.__hercPreloadDebug.safariNoop = true;
         return;
     }
-    const index = getRandomIndex(CONFIG.idleClips, lastIdleClipIndex);
+    const index = idleDeck.draw();
     if (index === -1) return;
 
     preloadedIdleClip = { index, clip: CONFIG.idleClips[index] };
@@ -569,7 +607,7 @@ function loadNextIdleClip() {
         clip = preloadedIdleClip.clip;
         preloadedIdleClip = null;
     } else {
-        index = getRandomIndex(CONFIG.idleClips, lastIdleClipIndex);
+        index = idleDeck.draw();
         if (index === -1) return;
         clip = CONFIG.idleClips[index];
     }

@@ -503,3 +503,90 @@ test('fix5c: Safari UA -> base paused during TV pathway, stays paused at termina
   if (after.opacity !== '0') throw new Error(`Safari: base opacity ${after.opacity}, expected 0`);
   if (after.imgO !== '1') throw new Error(`Safari: idle JPG opacity ${after.imgO}, expected 1`);
 });
+
+// --- Idle deck: no-repeat-until-all-played (Fisher-Yates) ---
+test('idle-deck: 28 draws from 14-clip deck contain every clip exactly twice, no adjacent repeats, boundary-safe over 50 reshuffles', async ({ page }) => {
+  await page.setViewport(VIEWPORT);
+  await page.goto(`http://localhost:${PORT}/index.html`, { waitUntil: 'domcontentloaded' });
+  const result = await page.evaluate(() => {
+    if (typeof createIdleDeck !== 'function') return { missing: true };
+    // (1) 28 draws from a fresh deck contain every index exactly twice
+    const deck = createIdleDeck(14);
+    const draws = [];
+    for (let i = 0; i < 28; i++) draws.push(deck.draw());
+    const counts = {};
+    draws.forEach((d) => { counts[d] = (counts[d] || 0) + 1; });
+    const everyTwice = Object.keys(counts).length === 14 && Object.values(counts).every((c) => c === 2);
+    // (2) no two adjacent draws within one epoch are equal
+    let adjacentInEpoch = false;
+    for (let i = 1; i < 28; i++) {
+      // epochs are 14 long; skip pairs spanning the boundary (index 13->14)
+      if (i === 14) continue;
+      if (draws[i] === draws[i - 1]) adjacentInEpoch = true;
+    }
+    // (3) across the boundary: first card of new epoch != last card of old epoch, 50 reshuffles
+    let boundaryRepeat = false;
+    let lastIdx = -1;
+    for (let run = 0; run < 50; run++) {
+      lastIdleClipIndex = lastIdx;
+      const d = createIdleDeck(14);
+      let prev = -1;
+      for (let i = 0; i < 28; i++) {
+        const card = d.draw();
+        if (i === 14 && card === prev) boundaryRepeat = true;
+        prev = card;
+        lastIdleClipIndex = card; // simulate the consumer tracking the last played clip
+      }
+      lastIdx = prev;
+    }
+    return { everyTwice, adjacentInEpoch, boundaryRepeat, remainingFn: typeof deck.remaining === 'function' };
+  });
+  if (result.missing) throw new Error('createIdleDeck is not defined on the page');
+  if (!result.remainingFn) throw new Error('deck.remaining() is not a function');
+  if (!result.everyTwice) throw new Error('28 draws did not contain every clip exactly twice');
+  if (result.adjacentInEpoch) throw new Error('adjacent repeat within one epoch');
+  if (result.boundaryRepeat) throw new Error('epoch boundary repeated last clip as first card of new epoch');
+});
+
+test('idle-deck: preloader and direct picker draw from the same shared deck (no in-epoch repeats in a full sweep)', async ({ page }) => {
+  await reachIdle(page, { safari: false });
+  const result = await page.evaluate(() => {
+    if (typeof idleDeck === 'undefined') return { missing: true };
+    const ap = document.getElementById('animation-player');
+    ap.play = function () { return Promise.resolve(); };
+    const seen = [];
+    const drawOnce = () => {
+      clearScheduledIdleClip();
+      preloadedIdleClip = null;
+      preloadNextIdleClip(); // Chrome path: preloader draws, consumer consumes
+      currentState = State.IDLE;
+      loadNextIdleClip();
+      if (typeof lastIdleClipIndex !== 'number' || lastIdleClipIndex === -1) throw new Error('bad index');
+      seen.push(lastIdleClipIndex);
+    };
+    // Drain any cards consumed before this test ran (page load preloads).
+    // Drain draws land in `seen` but are EXCLUDED from the epoch assertion —
+    // the leftover count is arbitrary, so the first 14 seen draws would span
+    // an epoch boundary and falsely flag legal cross-boundary repeats.
+    const drainCount = idleDeck.remaining();
+    while (idleDeck.remaining() > 0) drawOnce();
+    // Hermetic: kill any armed idle timer and prevent re-arming mid-sweep —
+    // a background timer firing between draws steals cards from the epoch.
+    clearScheduledIdleClip();
+    scheduleNextIdleClip = function () {};
+    // Deck is empty; the next 14 draws are exactly one full epoch.
+    const epochStart = seen.length;
+    for (let i = 0; i < 14; i++) drawOnce();
+    return { seen: seen.slice(epochStart), drained: drainCount };
+  });
+  if (result.missing) throw new Error('idleDeck is not defined on the page');
+  if (result.badIndex) throw new Error('loadNextIdleClip did not set a valid lastIdleClipIndex');
+  const seen = result.seen;
+  const withinEpoch = seen.slice(0, 14);
+  const unique = new Set(withinEpoch);
+  if (unique.size !== 14) throw new Error(`one epoch drew only ${unique.size}/14 unique clips: ${withinEpoch.join(',')}`);
+  for (let i = 1; i < withinEpoch.length; i++) {
+    if (withinEpoch[i] === withinEpoch[i - 1]) throw new Error(`adjacent repeat in epoch at draws ${i - 1}->${i}`);
+  }
+  if (seen[14] === seen[13]) throw new Error('epoch boundary repeat: first card of epoch 2 equals last of epoch 1');
+});
