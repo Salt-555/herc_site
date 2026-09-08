@@ -422,7 +422,7 @@ test('fix5a: Safari UA -> preloader no-op; Chrome UA -> preloadVideo.src set', a
   }
 });
 
-test('fix5b: Safari UA -> base paused during idle clip, resumed after returnToIdle; Chrome UA -> base not paused', async ({ page }) => {
+test('fix5b: Plan C Safari -> base retired (paused, hidden) through idle clip; Chrome UA -> base not paused', async ({ page }) => {
   await reachIdle(page, { safari: true });
   await page.evaluate(() => {
     const ap = document.getElementById('animation-player');
@@ -438,8 +438,15 @@ test('fix5b: Safari UA -> base paused during idle clip, resumed after returnToId
     const hs = document.getElementById('tv-hotspot');
     return hs && getComputedStyle(hs).display !== 'none';
   }, { timeout: 10000 });
-  const after = await page.evaluate(() => document.getElementById('idle-base-player').paused);
-  if (after !== false) throw new Error('Safari: idleBasePlayer still paused after returnToIdle');
+  const after = await page.evaluate(() => {
+    const base = document.getElementById('idle-base-player');
+    const img = document.getElementById('idle-image');
+    return { paused: base.paused, opacity: base.style.opacity, imgO: img.style.opacity };
+  });
+  // Plan C: base stays retired; the JPG is the persistent shop
+  if (after.paused !== true) throw new Error('Safari: retired base should stay paused');
+  if (after.opacity !== '0') throw new Error(`Safari: base opacity ${after.opacity}, expected 0 (Plan C)`);
+  if (after.imgO !== '1') throw new Error(`Safari: idle JPG opacity ${after.imgO}, expected 1 after returnToIdle`);
 
   const page2 = await page.browser().newPage();
   await reachIdle(page2, { safari: false });
@@ -486,6 +493,13 @@ test('fix5c: Safari UA -> base paused during TV pathway, stays paused at termina
     const hs = document.getElementById('tv-hotspot');
     return hs && getComputedStyle(hs).display !== 'none';
   }, { timeout: 10000 });
-  const after = await page.evaluate(() => document.getElementById('idle-base-player').paused);
-  if (after !== false) throw new Error('Safari: base not resumed after Go Back returnToIdle');
+  const after = await page.evaluate(() => {
+    const base = document.getElementById('idle-base-player');
+    const img = document.getElementById('idle-image');
+    return { paused: base.paused, opacity: base.style.opacity, imgO: img.style.opacity };
+  });
+  // Plan C: base stays retired after Go Back; JPG remains the shop
+  if (after.paused !== true) throw new Error('Safari: retired base should stay paused after Go Back');
+  if (after.opacity !== '0') throw new Error(`Safari: base opacity ${after.opacity}, expected 0`);
+  if (after.imgO !== '1') throw new Error(`Safari: idle JPG opacity ${after.imgO}, expected 1`);
 });

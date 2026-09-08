@@ -3,6 +3,10 @@
 const MEDIA_VER = 2;
 const MEDIA = (scene, role = 'base', ext = 'webm') => `Media/Processed/${scene}/${role}.${ext}?v=${MEDIA_VER}`;
 
+/* Plan C (mobile): single Safari gate for the whole file. */
+const IS_SAFARI = () => window.IOSMasking && window.IOSMasking.isSafariLike();
+
+
 /* =========================================================================
  *  Coordinate helper — converts from any source coordinate space to
  *  rendered pixel position relative to the scene container.
@@ -316,6 +320,18 @@ function unlockAudio() {
     animationPlayer.muted = false;
     bgMusicPlayer.muted = false;
 
+    /* Plan C (iOS): Safari only reliably plays ONE unmuted media element at
+       a time — a second unmuted element either steals the audio or gets
+       silenced by the system. Route every layer through a single audible
+       element: bg music stays the audible bed; character/screens are muted
+       and their audio is recovered by pausing-resuming through focus changes
+       (see setAudibleElement). */
+    if (IS_SAFARI()) {
+        SCREENS.forEach((s) => { s.element.muted = true; });
+        animationPlayer.muted = true;
+        setAudibleElement(bgMusicPlayer);
+    }
+
     /* Reset ramp state so volumes fade in from zero */
     volumeCurrent.bgMusic = 0;
     volumeCurrent.character = 0;
@@ -328,6 +344,23 @@ function unlockAudio() {
     log('Audio unlocked');
     document.removeEventListener('click', unlockAudio);
     document.removeEventListener('keydown', unlockAudio);
+}
+
+/* Plan C (iOS): sole-audible-element router. `el` becomes the only unmuted
+   media element; the previously audible one is muted while it plays on.
+   Muting mid-play keeps its decode alive, so returning focus is instant and
+   does not need a new gesture (the muted element keeps playing silently). */
+function setAudibleElement(el) {
+    const all = [bgMusicPlayer, animationPlayer, ...SCREENS.map((s) => s.element)];
+    all.forEach((e) => { if (e && e !== el) e.muted = true; });
+    if (!el) return;
+    el.muted = false;
+    // iOS needs an interruption of the previous element's audio route before
+    // the new element is allowed to sound; a pause/resume nudge does it.
+    if (el.paused && el.readyState >= 2) {
+        const p = el.play();
+        if (p && p.catch) p.catch(() => {});
+    }
 }
 
 document.addEventListener('click', unlockAudio);
@@ -468,13 +501,13 @@ function playVideo(video, src, { loop = false } = {}) {
  * ======================================================================= */
 
 function pauseBaseForOverlay() {
-    if (window.IOSMasking && window.IOSMasking.isSafariLike() && !idleBasePlayer.paused) {
+    if (IS_SAFARI() && !idleBasePlayer.paused) {
         idleBasePlayer.pause();
     }
 }
 
 function resumeBaseAfterOverlay() {
-    if (!window.IOSMasking || !window.IOSMasking.isSafariLike()) return;
+    if (!IS_SAFARI()) return;
     // During pathway terminals the suppression logic hides the base
     // (opacity 0); never resume a hidden base.
     if (idleBasePlayer.style.opacity !== '1') return;
@@ -495,7 +528,7 @@ function preloadNextIdleClip() {
     // Safari: a detached preloader adds a third concurrent decoder for
     // zero benefit — loadNextIdleClip() picks directly when nothing is
     // preloaded.
-    if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
+    if (IS_SAFARI()) {
         if (window.__hercPreloadDebug) window.__hercPreloadDebug.safariNoop = true;
         return;
     }
@@ -552,7 +585,7 @@ function loadNextIdleClip() {
     animationPlayer.load();
     // Idle clips are alpha WebMs too — on Safari their black background would
     // cover the screens behind the character mid-clip. Apply the root mask.
-    if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
+    if (IS_SAFARI()) {
         window.IOSMasking.applyContentMask(animationPlayer, window.IOSMasking.MASK_SOURCES.idleBase);
     }
 }
@@ -564,6 +597,7 @@ function playLoadedIdleClip() {
     log(`Playing idle clip: ${activeIdleClip.id}`);
     animationPlayer.style.opacity = '1';
     pauseBaseForOverlay();
+    if (IS_SAFARI()) setAudibleElement(animationPlayer);
 
     animationPlayer.play().catch((error) => {
         log(`Idle clip play error: ${error.message}`);
@@ -617,8 +651,16 @@ function finishWakeSequence() {
     animationPlayer.removeAttribute('src');
     animationPlayer.load();
 
-    idleBasePlayer.style.opacity = '1';
+    // Plan C: the JPG is the persistent shop on Safari — never raise the
+    // empty base video (its 375px box flashes when raised without content).
+    if (IS_SAFARI()) {
+        idleBasePlayer.style.opacity = '0';
+        idleImage.style.opacity = '1';
+    } else {
+        idleBasePlayer.style.opacity = '1';
+    }
     resumeBaseAfterOverlay();
+    if (IS_SAFARI()) setAudibleElement(bgMusicPlayer);
     hideBackButton();
     showHotspots();
     scheduleNextIdleClip();
@@ -640,12 +682,20 @@ function returnToIdle() {
     animationPlayer.load();
     if (window.IOSMasking) window.IOSMasking.clearContentMask(animationPlayer);
 
-    idleBasePlayer.style.opacity = '1';
+    // Plan C: the JPG is the persistent shop on Safari — never raise the
+    // empty base video (its 375px box flashes when raised without content).
+    if (IS_SAFARI()) {
+        idleBasePlayer.style.opacity = '0';
+        idleImage.style.opacity = '1';
+    } else {
+        idleBasePlayer.style.opacity = '1';
+    }
     resumeBaseAfterOverlay();
     hideCabinetArcade();
     hideTvVhsMenu();
     resumeBackgroundScreens();
 
+    if (IS_SAFARI()) setAudibleElement(bgMusicPlayer);
     hideBackButton();
     showHotspots();
     scheduleNextIdleClip();
@@ -653,7 +703,7 @@ function returnToIdle() {
 
 function startBaseIdleLoop() {
     // Plan C (mobile): the base video never runs on Safari — the JPG stays.
-    if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
+    if (IS_SAFARI()) {
         idleBasePlayer.style.opacity = '0';
         idleImage.style.opacity = '1';
         return;
@@ -695,6 +745,7 @@ function playPathwayClip(videoSrc, pathwayName) {
     animationPlayer.src = videoSrc;
     animationPlayer.load();
     pauseBaseForOverlay();
+    if (IS_SAFARI()) setAudibleElement(animationPlayer);
 
     // The zoom clip must be unmasked while playing; the terminal-frame cutout
     // mask is only applied when the clip ends (see the 'ended' listener).
@@ -715,7 +766,12 @@ function enterCabinetArcadePathway() {
     hideCabinetArcade();
     hideTvVhsMenu();
     cabinetIdleLayersSuppressed = false;
-    idleBasePlayer.style.opacity = '1';
+    if (IS_SAFARI()) {
+        idleBasePlayer.style.opacity = '0';
+        idleImage.style.opacity = '1';
+    } else {
+        idleBasePlayer.style.opacity = '1';
+    }
     SCREENS.forEach((screen) => {
         screen.volTarget = 0;
         if (screen.channels.length) screen.element.style.opacity = '1';
@@ -728,7 +784,12 @@ function enterTvVhsPathway() {
     hideCabinetArcade();
     hideTvVhsMenu();
     zoomIdleLayersSuppressed = false;
-    idleBasePlayer.style.opacity = '1';
+    if (IS_SAFARI()) {
+        idleBasePlayer.style.opacity = '0';
+        idleImage.style.opacity = '1';
+    } else {
+        idleBasePlayer.style.opacity = '1';
+    }
     SCREENS.forEach((screen) => {
         screen.volTarget = 0;
         if (screen.channels.length) screen.element.style.opacity = '1';
@@ -785,7 +846,7 @@ function hideTvVhsMenu() {
 
 function resumeBackgroundScreens() {
     // Plan C (mobile): screens stay off on Safari — occluded by the static JPG.
-    if (window.IOSMasking && window.IOSMasking.isSafariLike()) return;
+    if (IS_SAFARI()) return;
     SCREENS.forEach((screen) => {
         if (!screen.channels.length) {
             screen.element.style.opacity = '0';
@@ -1054,7 +1115,7 @@ idleImage.addEventListener('load', () => {
 // stands in as the shop, screens stay visible through CSS-mask cutouts, and
 // only ONE large video decoder ever runs (idle clips in animationPlayer).
 // This kills the decoder-budget blackouts without HEVC.
-if (window.IOSMasking && window.IOSMasking.isSafariLike()) {
+if (IS_SAFARI()) {
     idleBasePlayer.style.opacity = '0';
     idleBasePlayer.pause();
     idleBasePlayer.removeAttribute('src');
@@ -1066,7 +1127,7 @@ window.addEventListener('load', () => {
     updateLayout();
     // Plan C (mobile): screens are occluded by the static JPG shop on Safari —
     // never start them there (decoder budget).
-    if (!(window.IOSMasking && window.IOSMasking.isSafariLike())) {
+    if (!IS_SAFARI()) {
         SCREENS.forEach((screen) => playRandomChannel(screen));
     }
     prepareWakeSequence();
